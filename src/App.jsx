@@ -182,7 +182,7 @@ const App = () => {
             <option value="bantal">🛏️ Bantal</option>
             <option value="tumbler">💧 Tumbler</option>
           </select>
-          <div className="prize-selector-arrow">▼</div>
+          <div className="prize-selector-arrow mt-3">▼</div>
         </div>
       </div>
 
