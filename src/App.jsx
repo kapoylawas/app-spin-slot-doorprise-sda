@@ -7,37 +7,75 @@ const App = () => {
   const [names, setNames] = useState([]);
   const [selectedName, setSelectedName] = useState('');
   const [selectedPhone, setSelectedPhone] = useState('');
+  const [selectedId, setSelectedId] = useState(null);
   const [rolling, setRolling] = useState(false);
   const [winner, setWinner] = useState(false);
   const [slotPosition, setSlotPosition] = useState(0);
+  const [prize, setPrize] = useState('kulkas');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchData = async () => {
+    setIsRefreshing(true);
+    try {
+      const response = await axios.get(
+        'https://daftarhadir.sidoarjokab.go.id/api/get-peserta-doorprize?menerima=semua',
+        {
+          headers: {
+            'Authorization': 'fkngdfngndngfogmvo95t6509rjgr8u98-=p=-'
+          }
+        }
+      );
+
+      const eligibleParticipants = response.data.data.filter(
+        peserta => peserta.status_peserta === "" || peserta.status_peserta === undefined
+      );
+
+      setNames(eligibleParticipants);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      setNames([]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await axios.get(
-          'https://daftarhadir.sidoarjokab.go.id/api/get-peserta-doorprize?menerima=semua',
-          {
-            headers: {
-              'Authorization': 'fkngdfngndngfogmvo95t6509rjgr8u98-=p=-'
-            }
-          }
-        );
-        setNames(response.data.data || []); // Assuming the data is in response.data.data
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        setNames([]);
-      }
-    };
     fetchData();
   }, []);
 
+  const maskPhoneNumber = (phone) => {
+    if (!phone) return '---';
+    if (phone.length <= 7) return phone;
+
+    const firstPart = phone.substring(0, 5);
+    const lastPart = phone.substring(phone.length - 4);
+    return `${firstPart}***${lastPart}`;
+  };
+
+  const updateWinnerStatus = async (id) => {
+    try {
+      await axios.get(
+        `https://daftarhadir.sidoarjokab.go.id/api/changestatus-peserta-doorprize?id=${id}&status=1&hadiah=${prize}`,
+        {
+          headers: {
+            'Authorization': 'fkngdfngndngfogmvo95t6509rjgr8u98-=p=-'
+          }
+        }
+      );
+      console.log('Status peserta berhasil diupdate');
+    } catch (error) {
+      console.error('Gagal mengupdate status peserta:', error);
+    }
+  };
+
   const getRandomName = () => {
-    if (rolling || names.length === 0) return;
+    if (rolling || names.length === 0 || isRefreshing) return;
 
     setWinner(false);
     setRolling(true);
     setSelectedName('');
     setSelectedPhone('');
+    setSelectedId(null);
 
     const duration = 3000;
     const startTime = Date.now();
@@ -52,11 +90,24 @@ const App = () => {
         setSlotPosition(position);
         requestAnimationFrame(roll);
       } else {
+        const winnerData = names[targetIndex];
         setSlotPosition(targetIndex);
-        setSelectedName(names[targetIndex].nama);
-        setSelectedPhone(names[targetIndex].telp);
+        setSelectedName(winnerData.nama);
+        setSelectedPhone(winnerData.telp);
+        setSelectedId(winnerData.id);
         setRolling(false);
         setWinner(true);
+
+        if (winnerData.id) {
+          updateWinnerStatus(winnerData.id);
+        }
+
+        // Auto-refresh data after 2 seconds
+        setTimeout(() => {
+          fetchData();
+          setSelectedId(null);
+          setWinner(false);
+        }, 5000);
       }
     };
 
@@ -76,6 +127,29 @@ const App = () => {
     <div className="container text-center mt-5">
       <img src={sidoarjoImage} alt="Sidoarjo" className="img-fluid mb-3" />
       <h1>Acak Doorprize Peserta</h1>
+
+      <div className="prize-selector-container">
+        <div className="prize-selector-wrapper">
+          <label className="prize-selector-label">
+            <span className="prize-selector-icon">🎁</span>
+            Pilih Hadiah:
+          </label>
+          <select
+            value={prize}
+            onChange={(e) => setPrize(e.target.value)}
+            className="prize-selector-dropdown"
+            disabled={rolling || isRefreshing}
+          >
+            <option value="" disabled hidden>-- Pilih Hadiah --</option>
+            <option value="kulkas">🥶 Kulkas</option>
+            <option value="tv">📺 TV</option>
+            <option value="hp">📱 Smartphone</option>
+          </select>
+          <div className="prize-selector-arrow">▼</div>
+        </div>
+      </div>
+
+      {isRefreshing && <div className="text-info mb-3">Memperbarui data peserta...</div>}
 
       <div className="slot-machine">
         <div className={`slot-window ${winner ? 'hidden' : ''}`}></div>
@@ -99,12 +173,49 @@ const App = () => {
       <button
         className="button mb-2"
         onClick={getRandomName}
-        disabled={rolling || names.length === 0}
+        disabled={rolling || names.length === 0 || isRefreshing}
       >
         {rolling ? 'Mengacak...' : 'Acak Nama Pemenang'}
       </button>
-      <h2>Nama Terpilih: <span className="text-success">{selectedName || '---'}</span></h2>
-      <h2>Nomor Telepon: <span className="text-success">{selectedPhone || '---'}</span></h2>
+
+
+
+      <div className="winner-container">
+        {selectedName && (
+          <>
+            <div className="confetti-animation"></div>
+            <div className="winner-header">
+              <h2 className="winner-title">🎉 SELAMAT! 🎉</h2>
+              <p className="winner-subtitle">Anda memenangkan {prize.toUpperCase()}!</p>
+            </div>
+          </>
+        )}
+
+        <div className="winner-card">
+          <div className="winner-info">
+            <div className="winner-row">
+              <span className="winner-label">Nama Terpilih:</span>
+              <span className="winner-value highlight">{selectedName || '---'}</span>
+            </div>
+            <div className="winner-row">
+              <span className="winner-label">Nomor Telepon:</span>
+              <span className="winner-value">
+                {selectedPhone ? maskPhoneNumber(selectedPhone) : '---'}
+              </span>
+            </div>
+          </div>
+
+          {selectedName && (
+            <div className="winner-footer">
+              <p className="congrats-message">
+                "Selamat atas kemenangan Anda! Hadiah akan segera dihubungi oleh panitia."
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+
     </div>
   );
 };
