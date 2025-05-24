@@ -27,7 +27,7 @@ const App = () => {
       );
 
       const eligibleParticipants = response.data.data.filter(
-        peserta => peserta.status_peserta === "" || peserta.status_peserta === undefined
+        peserta => peserta.status_peserta === "" || peserta.status_peserta === undefined || peserta.status_peserta === null
       );
 
       setNames(eligibleParticipants);
