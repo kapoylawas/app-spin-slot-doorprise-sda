@@ -34,7 +34,7 @@
     transform: translateY(-50%);
     border: 4px solid #0d6efd;
     border-radius: 8px;
-    background: linear-gradient( to bottom, rgba(13, 110, 253, 0.15) 0%, rgba(13, 110, 253, 0.05) 100%);
+    background: linear-gradient(to bottom, rgba(13, 110, 253, 0.15) 0%, rgba(13, 110, 253, 0.05) 100%);
     z-index: 10;
     transition: all 0.3s ease;
     box-shadow: 0 0 20px rgba(13, 110, 253, 0.3), inset 0 0 15px rgba(255, 255, 255, 0.8);
@@ -148,6 +148,7 @@
         background-color: rgba(255, 255, 255, 0.8);
         transform: translateX(0);
     }
+
     100% {
         background-color: rgba(52, 152, 219, 0.3);
         transform: translateX(2px);
@@ -172,11 +173,13 @@
         box-shadow: 0 0 20px rgba(243, 156, 18, 0.6);
         background-position: 0% 50%;
     }
+
     50% {
         transform: scale(1.1);
         box-shadow: 0 0 40px rgba(243, 156, 18, 0.8);
         background-position: 100% 50%;
     }
+
     100% {
         transform: scale(1.05);
         box-shadow: 0 0 20px rgba(243, 156, 18, 0.6);
@@ -269,9 +272,11 @@
         padding: 16px;
         border-radius: 10px;
     }
+
     .card-label {
         font-size: 0.95rem;
     }
+
     .card-value {
         font-size: 1rem;
     }
@@ -281,10 +286,12 @@
     .name-card {
         padding: 12px;
     }
+
     .card-item {
         flex-direction: column;
         gap: 4px;
     }
+
     .card-label,
     .card-value {
         font-size: 0.9rem;
@@ -426,6 +433,7 @@
     0% {
         transform: translateY(-100vh) rotate(0deg);
     }
+
     100% {
         transform: translateY(100vh) rotate(360deg);
     }
@@ -435,9 +443,11 @@
     0% {
         transform: scale(1);
     }
+
     50% {
         transform: scale(1.05);
     }
+
     100% {
         transform: scale(1);
     }
@@ -447,6 +457,7 @@
     0% {
         text-shadow: 0 0 5px rgba(231, 76, 60, 0.5);
     }
+
     100% {
         text-shadow: 0 0 15px rgba(231, 76, 60, 0.8);
     }
@@ -459,13 +470,16 @@
     .winner-title {
         font-size: 1.8rem;
     }
+
     .winner-subtitle {
         font-size: 1.1rem;
     }
+
     .winner-row {
         flex-direction: column;
         align-items: flex-start;
     }
+
     .winner-value {
         text-align: left;
         margin-top: 5px;
@@ -557,11 +571,89 @@
     .prize-selector-wrapper {
         min-width: 200px;
     }
+
     .prize-selector-label {
         font-size: 1rem;
     }
+
     .prize-selector-dropdown {
         padding: 8px 12px;
         font-size: 0.9rem;
+    }
+}
+
+/* Toast Notification Styles */
+.toast-notification {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #ff5722;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    animation: toastFade 2.5s ease-in-out;
+    font-weight: bold;
+}
+
+@keyframes toastFade {
+    0% {
+        opacity: 0;
+        bottom: 0;
+    }
+
+    10% {
+        opacity: 1;
+        bottom: 20px;
+    }
+
+    90% {
+        opacity: 1;
+        bottom: 20px;
+    }
+
+    100% {
+        opacity: 0;
+        bottom: 0;
+    }
+}
+
+/* Toast Top Center */
+.toast-top-center {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #ff5722;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    animation: toastSlideDown 2.5s ease-in-out;
+    font-weight: bold;
+}
+
+@keyframes toastSlideDown {
+    0% {
+        opacity: 0;
+        top: -50px;
+    }
+
+    15% {
+        opacity: 1;
+        top: 20px;
+    }
+
+    85% {
+        opacity: 1;
+        top: 20px;
+    }
+
+    100% {
+        opacity: 0;
+        top: -50px;
     }
 }

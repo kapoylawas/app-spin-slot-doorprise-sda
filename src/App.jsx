@@ -1,38 +1,42 @@
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import './App.css';
-import sidoarjoImage from '../public/sidoarjo.png';
+import React, { useEffect, useState } from "react";
+import axios from "axios";
+import "./App.css";
+import sidoarjoImage from "../public/sidoarjo.png";
 
 const App = () => {
   const [names, setNames] = useState([]);
-  const [selectedName, setSelectedName] = useState('');
-  const [selectedPhone, setSelectedPhone] = useState('');
+  const [selectedName, setSelectedName] = useState("");
+  const [selectedPhone, setSelectedPhone] = useState("");
   const [selectedId, setSelectedId] = useState(null);
   const [rolling, setRolling] = useState(false);
   const [winner, setWinner] = useState(false);
   const [slotPosition, setSlotPosition] = useState(0);
-  const [prize, setPrize] = useState('kulkas');
+  const [prize, setPrize] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showToast, setShowToast] = useState(false);
 
   const fetchData = async () => {
     setIsRefreshing(true);
     try {
       const response = await axios.get(
-        'https://daftarhadir.sidoarjokab.go.id/api/get-peserta-doorprize?menerima=semua',
+        "https://daftarhadir.sidoarjokab.go.id/api/get-peserta-doorprize?menerima=semua",
         {
           headers: {
-            'Authorization': 'fkngdfngndngfogmvo95t6509rjgr8u98-=p=-'
-          }
+            Authorization: "fkngdfngndngfogmvo95t6509rjgr8u98-=p=-",
+          },
         }
       );
 
       const eligibleParticipants = response.data.data.filter(
-        peserta => peserta.status_peserta === "" || peserta.status_peserta === undefined || peserta.status_peserta === null
+        (peserta) =>
+          peserta.status_peserta === "" ||
+          peserta.status_peserta === undefined ||
+          peserta.status_peserta === null
       );
 
       setNames(eligibleParticipants);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error("Error fetching data:", error);
       setNames([]);
     } finally {
       setIsRefreshing(false);
@@ -44,7 +48,7 @@ const App = () => {
   }, []);
 
   const maskPhoneNumber = (phone) => {
-    if (!phone) return '---';
+    if (!phone) return "---";
     if (phone.length <= 7) return phone;
 
     const firstPart = phone.substring(0, 5);
@@ -58,23 +62,30 @@ const App = () => {
         `https://daftarhadir.sidoarjokab.go.id/api/changestatus-peserta-doorprize?id=${id}&status=1&hadiah=${prize}`,
         {
           headers: {
-            'Authorization': 'fkngdfngndngfogmvo95t6509rjgr8u98-=p=-'
-          }
+            Authorization: "fkngdfngndngfogmvo95t6509rjgr8u98-=p=-",
+          },
         }
       );
-      console.log('Status peserta berhasil diupdate');
+      console.log("Status peserta berhasil diupdate");
     } catch (error) {
-      console.error('Gagal mengupdate status peserta:', error);
+      console.error("Gagal mengupdate status peserta:", error);
     }
   };
 
   const getRandomName = () => {
+    // Cek jika hadiah belum dipilih
+    if (!prize) {
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 6000);
+      return;
+    }
+
     if (rolling || names.length === 0 || isRefreshing) return;
 
     setWinner(false);
     setRolling(true);
-    setSelectedName('');
-    setSelectedPhone('');
+    setSelectedName("");
+    setSelectedPhone("");
     setSelectedId(null);
 
     const duration = 3000;
@@ -125,6 +136,11 @@ const App = () => {
 
   return (
     <div className="container text-center mt-5">
+      {showToast && (
+        <div className="toast-top-center">
+          ⚠️ Silakan pilih hadiah terlebih dahulu!
+        </div>
+      )}
       <img src={sidoarjoImage} alt="Sidoarjo" className="img-fluid mb-3" />
       <h1>Acak Doorprize Peserta</h1>
 
@@ -140,20 +156,43 @@ const App = () => {
             className="prize-selector-dropdown"
             disabled={rolling || isRefreshing}
           >
-            <option value="" disabled hidden>-- Pilih Hadiah --</option>
-            <option value="kulkas">🥶 Kulkas</option>
-            <option value="tv">📺 TV</option>
+            <option value="" disabled hidden>
+              -- Pilih Hadiah --
+            </option>
+            <option value="kipas angin">🌀 Kipas Angin</option>
+            <option value="magicom">🍚 Magicom</option>
+            <option value="setrika">👔 Setrika</option>
+            <option value="kulkas">🥶 Lemari Es/Kulkas</option>
+            <option value="blender">🧃 Blender</option>
+            <option value="mug">☕ Mug</option>
+            <option value="tabungan delta arta 500k">
+              💰 Tabungan Delta Arta 500K
+            </option>
+            <option value="sepeda ontel">🚲 Sepeda Ontel</option>
             <option value="hp">📱 Smartphone</option>
+            <option value="smartwatch">⌚ Smartwatch</option>
+            <option value="sepeda listrik">⚡ Sepeda Listrik</option>
+            <option value="payung">☂️ Payung</option>
+            <option value="lemari plastik">🗄️ Lemari Plastik</option>
+            <option value="oven">🍪 Oven</option>
+            <option value="dispenser">🚰 Dispenser</option>
+            <option value="set cangkir">🍵 Set Cangkir</option>
+            <option value="set alat makan">🍽️ Set Alat Makan</option>
+            <option value="tv">📺 TV</option>
+            <option value="bantal">🛏️ Bantal</option>
+            <option value="tumbler">💧 Tumbler</option>
           </select>
           <div className="prize-selector-arrow">▼</div>
         </div>
       </div>
 
-      {isRefreshing && <div className="text-info mb-3">Memperbarui data peserta...</div>}
+      {isRefreshing && (
+        <div className="text-info mb-3">Memperbarui data peserta...</div>
+      )}
 
       <div className="slot-machine">
-        <div className={`slot-window ${winner ? 'hidden' : ''}`}></div>
-        <div className={`slot-reel ${rolling ? 'rolling' : ''}`}>
+        <div className={`slot-window ${winner ? "hidden" : ""}`}></div>
+        <div className={`slot-reel ${rolling ? "rolling" : ""}`}>
           <div
             className="slot-items"
             style={{ top: `-${(slotPosition % 1) * 60}px` }}
@@ -161,7 +200,7 @@ const App = () => {
             {visibleItems.map((item, index) => (
               <div
                 key={`${item.id || index}-${item.nama}`}
-                className={`slot-item ${!rolling && selectedName === item.nama && winner ? 'winner' : ''}`}
+                className={`slot-item ${!rolling && selectedName === item.nama && winner ? "winner" : ""}`}
               >
                 {item.nama}
               </div>
@@ -175,10 +214,8 @@ const App = () => {
         onClick={getRandomName}
         disabled={rolling || names.length === 0 || isRefreshing}
       >
-        {rolling ? 'Mengacak...' : 'Acak Nama Pemenang'}
+        {rolling ? "Mengacak..." : "Acak Nama Pemenang"}
       </button>
-
-
 
       <div className="winner-container">
         {selectedName && (
@@ -186,7 +223,9 @@ const App = () => {
             <div className="confetti-animation"></div>
             <div className="winner-header">
               <h2 className="winner-title">🎉 SELAMAT! 🎉</h2>
-              <p className="winner-subtitle">Anda memenangkan {prize.toUpperCase()}!</p>
+              <p className="winner-subtitle">
+                Anda memenangkan {prize.toUpperCase()}!
+              </p>
             </div>
           </>
         )}
@@ -195,12 +234,14 @@ const App = () => {
           <div className="winner-info">
             <div className="winner-row">
               <span className="winner-label">Nama Terpilih:</span>
-              <span className="winner-value highlight">{selectedName || '---'}</span>
+              <span className="winner-value highlight">
+                {selectedName || "---"}
+              </span>
             </div>
             <div className="winner-row">
               <span className="winner-label">Nomor Telepon:</span>
               <span className="winner-value">
-                {selectedPhone ? maskPhoneNumber(selectedPhone) : '---'}
+                {selectedPhone ? maskPhoneNumber(selectedPhone) : "---"}
               </span>
             </div>
           </div>
@@ -208,14 +249,13 @@ const App = () => {
           {selectedName && (
             <div className="winner-footer">
               <p className="congrats-message">
-                "Selamat atas kemenangan Anda! Hadiah akan segera dihubungi oleh panitia."
+                "Selamat atas kemenangan Anda! Hadiah akan segera dihubungi oleh
+                panitia."
               </p>
             </div>
           )}
         </div>
       </div>
-
-
     </div>
   );
 };
