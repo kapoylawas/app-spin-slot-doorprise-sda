@@ -6,14 +6,27 @@ import sidoarjoImage from '../public/sidoarjo.png';
 const App = () => {
   const [names, setNames] = useState([]);
   const [selectedName, setSelectedName] = useState('');
+  const [selectedPhone, setSelectedPhone] = useState('');
   const [rolling, setRolling] = useState(false);
   const [winner, setWinner] = useState(false);
   const [slotPosition, setSlotPosition] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
-      const response = await axios.get('https://api.sheety.co/7a0bc58259777289c6290063637d3060/namaPeserta/wheelItems');
-      setNames(response.data.wheelItems); // Hapus duplikasi array
+      try {
+        const response = await axios.get(
+          'https://daftarhadir.sidoarjokab.go.id/api/get-peserta-doorprize?menerima=semua',
+          {
+            headers: {
+              'Authorization': 'fkngdfngndngfogmvo95t6509rjgr8u98-=p=-'
+            }
+          }
+        );
+        setNames(response.data.data || []); // Assuming the data is in response.data.data
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        setNames([]);
+      }
     };
     fetchData();
   }, []);
@@ -24,6 +37,7 @@ const App = () => {
     setWinner(false);
     setRolling(true);
     setSelectedName('');
+    setSelectedPhone('');
 
     const duration = 3000;
     const startTime = Date.now();
@@ -40,6 +54,7 @@ const App = () => {
       } else {
         setSlotPosition(targetIndex);
         setSelectedName(names[targetIndex].nama);
+        setSelectedPhone(names[targetIndex].telp);
         setRolling(false);
         setWinner(true);
       }
@@ -89,6 +104,7 @@ const App = () => {
         {rolling ? 'Mengacak...' : 'Acak Nama Pemenang'}
       </button>
       <h2>Nama Terpilih: <span className="text-success">{selectedName || '---'}</span></h2>
+      <h2>Nomor Telepon: <span className="text-success">{selectedPhone || '---'}</span></h2>
     </div>
   );
 };
