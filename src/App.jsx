@@ -173,6 +173,7 @@ const App = () => {
             <option value="oven">🍪 Oven</option>
             <option value="almari plastik">🗄️ Almari Plastik</option>
             <option value="tabungan delta arta 500k">💰 Tabungan Delta Arta @Rp.500.000</option>
+            <option value="kominfo jatim 500k">💰 kominfo jatim 500k</option>
             <option value="tabungan bank jatim">💰 Tabungan Bank Jatim</option>
             <option value="set alat makan">🍽️ Set Alat Makan</option>
             <option value="kompor gas rinai">🔥 Kompor Gas Rinai</option>
