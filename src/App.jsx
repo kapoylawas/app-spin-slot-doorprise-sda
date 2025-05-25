@@ -159,28 +159,38 @@ const App = () => {
             <option value="" disabled hidden>
               -- Pilih Hadiah --
             </option>
-            <option value="kipas angin">🌀 Kipas Angin</option>
-            <option value="magicom">🍚 Magicom</option>
-            <option value="setrika">👔 Setrika</option>
-            <option value="kulkas">🥶 Lemari Es/Kulkas</option>
-            <option value="blender">🧃 Blender</option>
-            <option value="mug">☕ Mug</option>
-            <option value="tabungan delta arta 500k">
-              💰 Tabungan Delta Arta 500K
-            </option>
-            <option value="sepeda ontel">🚲 Sepeda Ontel</option>
-            <option value="hp">📱 Smartphone</option>
-            <option value="smartwatch">⌚ Smartwatch</option>
+            <option value="tv lg 55 inch">📺 TV LG 55 Inch</option>
             <option value="sepeda listrik">⚡ Sepeda Listrik</option>
-            <option value="payung">☂️ Payung</option>
-            <option value="lemari plastik">🗄️ Lemari Plastik</option>
+            <option value="lemari es 2 pintu polytron">🥶 Lemari Es 2 Pintu Polytron</option>
+            <option value="huawe watch fit 3">⌚ Huawei Watch FIT 3</option>
+            <option value="tv 32 inch">📺 TV 32"</option>
+            <option value="huawe watch gt 5">⌚ Huawei Watch GT 5</option>
+            <option value="sepeda phoenix">🚲 Sepeda Phoenix</option>
+            <option value="sepeda trex">🚲 Sepeda Trex</option>
+            <option value="hp redmi a5">📱 HP Redmi A5</option>
+            <option value="magiccom miyako">🍚 MagicCom Miyako</option>
+            <option value="magiccom">🍚 MagicCom</option>
             <option value="oven">🍪 Oven</option>
-            <option value="dispenser">🚰 Dispenser</option>
-            <option value="set cangkir">🍵 Set Cangkir</option>
+            <option value="almari plastik">🗄️ Almari Plastik</option>
+            <option value="tabungan delta arta 500k">💰 Tabungan Delta Arta @Rp.500.000</option>
+            <option value="tabungan bank jatim">💰 Tabungan Bank Jatim</option>
             <option value="set alat makan">🍽️ Set Alat Makan</option>
-            <option value="tv">📺 TV</option>
-            <option value="bantal">🛏️ Bantal</option>
+            <option value="kompor gas rinai">🔥 Kompor Gas Rinai</option>
+            <option value="kompor gas miyako">🔥 Kompor Gas Miyako</option>
+            <option value="kipas angin miyako">🌀 Kipas Angin Miyako</option>
+            <option value="kipas angin">🌀 Kipas Angin</option>
+            <option value="set cangkir">🍵 Set Cangkir</option>
+            <option value="setrika listrik">👔 Setrika Listrik</option>
+            <option value="setrika maspion">👔 Setrika Maspion</option>
+            <option value="setrika">👔 Setrika</option>
+            <option value="blender maspion">🧃 Blender Maspion</option>
+            <option value="dispenser miyako">🚰 Dispenser Miyako</option>
+            <option value="payung">☂️ Payung</option>
+            <option value="mug">☕ Mug</option>
             <option value="tumbler">💧 Tumbler</option>
+            <option value="bantal">🛏️ Bantal</option>
+            <option value="headphone">🎧 Headphone</option>
+            <option value="rice cooker philip">🍚 Rice Cooker Philip</option>
           </select>
           <div className="prize-selector-arrow mt-3">▼</div>
         </div>
