@@ -88,7 +88,7 @@ const App = () => {
     setSelectedPhone("");
     setSelectedId(null);
 
-    const duration = 3000;
+    const duration = 4000;
     const startTime = Date.now();
     const targetIndex = Math.floor(Math.random() * names.length);
 
