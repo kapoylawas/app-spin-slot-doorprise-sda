@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import "./App.css";
 import sidoarjoImage from "../public/sidoarjo.png";
 import axios from "axios"; // LIVE API INTEGRATION
@@ -92,6 +92,9 @@ const App = () => {
   const [showToast, setShowToast] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
 
+  // Hard lock to prevent double-click rapid spin (useRef is synchronous, unlike setState)
+  const isDrawingRef = useRef(false);
+
   // Reel-specific animation states
   const [reelItems, setReelItems] = useState([]);
   const [activeIndex, setActiveIndex] = useState(1);
@@ -136,21 +139,30 @@ const App = () => {
     }
   };
 
-  // Update winner status in real production API database
-  const updateWinnerStatus = async (id) => {
-    try {
-      await axios.get(
-        `https://daftarhadir.sidoarjokab.go.id/api/changestatus-peserta-doorprize?id=${id}&status=1&hadiah=${prize}`,
-        {
-          headers: {
-            Authorization: "fkngdfngndngfogmvo95t6509rjgr8u98-=p=-",
-          },
+  // Update winner status in real production API database (with retry)
+  const updateWinnerStatus = async (id, prizeValue) => {
+    const maxRetries = 3;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await axios.get(
+          `https://daftarhadir.sidoarjokab.go.id/api/changestatus-peserta-doorprize?id=${id}&status=1&hadiah=${prizeValue}`,
+          {
+            headers: {
+              Authorization: "fkngdfngndngfogmvo95t6509rjgr8u98-=p=-",
+            },
+          }
+        );
+        console.log(`Status peserta ID ${id} berhasil diupdate ke database (attempt ${attempt})`);
+        return true; // Success
+      } catch (error) {
+        console.error(`Gagal mengupdate status peserta (attempt ${attempt}/${maxRetries}):`, error);
+        if (attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, 1000 * attempt)); // Backoff delay
         }
-      );
-      console.log("Status peserta berhasil diupdate ke database");
-    } catch (error) {
-      console.error("Gagal mengupdate status peserta di API:", error);
+      }
     }
+    console.error(`CRITICAL: Gagal mengupdate status peserta ID ${id} setelah ${maxRetries} percobaan!`);
+    return false;
   };
 
   // Fetch initial data on load
@@ -190,27 +202,58 @@ const App = () => {
   };
 
   const startDraw = () => {
+    // GUARD 1: Prize must be selected
     if (!prize) {
       setShowToast(true);
       setTimeout(() => setShowToast(false), 5000);
       return;
     }
 
-    const eligible = names.filter((peserta) => !peserta.status_peserta);
-    if (rolling || eligible.length === 0) return;
+    // GUARD 2: Synchronous ref lock — prevents double-click race condition
+    if (isDrawingRef.current) return;
 
+    // GUARD 3: Block during data refresh
+    if (isRefreshing) return;
+
+    // GUARD 4: Build eligible list — exclude anyone with status_peserta set
+    const eligible = names.filter((peserta) => !peserta.status_peserta);
+
+    // GUARD 5: Cross-check against local pastWinners as a safety net
+    const pastWinnerIds = new Set(pastWinners.map((w) => w.id));
+    const safeEligible = eligible.filter((p) => !pastWinnerIds.has(p.id));
+
+    if (rolling || safeEligible.length === 0) return;
+
+    // LOCK the draw — synchronous, no race condition possible
+    isDrawingRef.current = true;
     setWinner(false);
     setRolling(true);
     setWinnerData(null);
 
-    // Pick winner index
-    const targetIdx = Math.floor(Math.random() * eligible.length);
-    const chosenWinner = eligible[targetIdx];
+    // Use crypto-grade randomness when available, fallback to Math.random
+    let randomValue;
+    if (window.crypto && window.crypto.getRandomValues) {
+      const arr = new Uint32Array(1);
+      window.crypto.getRandomValues(arr);
+      randomValue = arr[0] / (0xFFFFFFFF + 1);
+    } else {
+      randomValue = Math.random();
+    }
 
-    // Seed index 0, 1, 2 with currently visible items to prevent jumpiness on reset
-    const currentTop = reelItems[activeIndex - 1] || eligible[0];
-    const currentMiddle = reelItems[activeIndex] || eligible[1];
-    const currentBottom = reelItems[activeIndex + 1] || eligible[2];
+    const targetIdx = Math.floor(randomValue * safeEligible.length);
+    const chosenWinner = safeEligible[targetIdx];
+
+    // Immediately mark as ineligible in local state to prevent any re-selection
+    setNames((prevNames) =>
+      prevNames.map((p) =>
+        p.id === chosenWinner.id ? { ...p, status_peserta: "1" } : p
+      )
+    );
+
+    // Seed index 0, 1, 2 with currently visible items to prevent jumpiness
+    const currentTop = reelItems[activeIndex - 1] || safeEligible[0];
+    const currentMiddle = reelItems[activeIndex] || safeEligible[1 % safeEligible.length];
+    const currentBottom = reelItems[activeIndex + 1] || safeEligible[2 % safeEligible.length];
 
     const newReel = Array(45).fill(null);
     newReel[0] = currentTop;
@@ -220,14 +263,15 @@ const App = () => {
     // Winner will be centered at index 40
     newReel[40] = chosenWinner;
 
-    // Fill other spots with random eligible items
+    // Fill other spots with random eligible items (excluding the winner to avoid visual confusion)
+    const fillPool = safeEligible.filter((p) => p.id !== chosenWinner.id);
+    const fillSource = fillPool.length > 0 ? fillPool : safeEligible;
     for (let i = 3; i < 45; i++) {
       if (i === 40) continue;
-      const randItem = eligible[Math.floor(Math.random() * eligible.length)];
-      newReel[i] = randItem;
+      newReel[i] = fillSource[Math.floor(Math.random() * fillSource.length)];
     }
 
-    // Set reel items and reset translate position to 0 instantly (transition: none)
+    // Set reel items and reset translate position to 0 instantly
     setReelItems(newReel);
     setActiveIndex(40);
     setTranslateY(0);
@@ -236,35 +280,25 @@ const App = () => {
     // Play tick sound pattern
     playSpinTicker();
 
-    // Trigger the slide translation on the next browser frame
+    // Trigger the CSS transition slide
     setTimeout(() => {
-      // Land item 40 in center of the viewport
-      // Each item is 100px high. Viewport is 300px high.
-      // Top of item 40 align at top of center window (100px down) -> translate by (40 - 1) * 100px = 3900px
       setTranslateY(3900);
       setTransitionStyle("transform 4.5s cubic-bezier(0.15, 0.85, 0.35, 1)");
     }, 50);
 
-    // When the animation completes (after 4.5 seconds)
+    // When the animation completes
     setTimeout(async () => {
       setRolling(false);
       setWinner(true);
       setWinnerData(chosenWinner);
       playSound("win");
 
-      // Update winner status in production database via API
+      // Update winner status in production database via API (with retry)
       if (chosenWinner.id) {
-        updateWinnerStatus(chosenWinner.id);
+        await updateWinnerStatus(chosenWinner.id, prize);
       }
 
-      // Update local state temporarily to keep calculations correct
-      setNames((prevNames) => {
-        return prevNames.map((p) =>
-          p.id === chosenWinner.id ? { ...p, status_peserta: "1" } : p
-        );
-      });
-
-      // Add to past winners
+      // Add to past winners log
       const timeStr = new Date().toLocaleTimeString("id-ID", {
         hour: "2-digit",
         minute: "2-digit",
@@ -280,12 +314,17 @@ const App = () => {
         localStorage.setItem("sidoarjo_doorprize_winners", JSON.stringify(updated));
         return updated;
       });
+
+      // Release the draw lock
+      isDrawingRef.current = false;
     }, 4550);
   };
 
-  const closeWinnerModal = () => {
+  const closeWinnerModal = async () => {
     setWinner(false);
-    fetchData(); // Refetch latest data from database (which will exclude the winner)
+    setWinnerData(null);
+    // Re-sync with API to get fresh eligible list (will exclude winners in DB)
+    await fetchData();
   };
 
   const resetLottery = () => {
@@ -548,7 +587,7 @@ const App = () => {
                     <tr>
                       <th>Waktu</th>
                       <th>Nama Pemenang</th>
-                      <th>Instansi/Dinas</th>
+                      <th>Peserta</th>
                       <th>Hadiah</th>
                     </tr>
                   </thead>
