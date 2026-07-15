@@ -574,7 +574,9 @@ const App = () => {
         <div className="reset-modal-overlay" onClick={() => setShowResetModal(false)}>
           <div className="reset-modal-card animate-zoom-in" onClick={(e) => e.stopPropagation()}>
             {/* Warning Icon */}
-            <div className="reset-modal-icon">⚠️</div>
+            <div className="reset-modal-icon">
+              <img src={sidoarjoImage} alt="Logo Sidoarjo" className="reset-modal-logo" />
+            </div>
             
             <h3 className="reset-modal-title">Reset Data Pemenang?</h3>
             
