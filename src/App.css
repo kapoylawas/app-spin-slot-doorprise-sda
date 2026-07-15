@@ -64,7 +64,7 @@ body {
   background-image:
     radial-gradient(circle, #e0d9cc 1px, transparent 1px);
   background-size: 24px 24px;
-  padding: 0 0 60px 0;
+  padding: 2px 0 16px 0;
   position: relative;
   overflow-x: hidden;
 }
@@ -119,6 +119,62 @@ body {
   padding: 0 20px;
 }
 
+.lucky-draw-container.wide-layout {
+  max-width: 1400px;
+}
+
+/* Videotron 2-Column Grid Layout */
+.videotron-grid-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: stretch;
+}
+
+.videotron-col-left,
+.videotron-col-right {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.full-height {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.empty-winners-placeholder {
+  padding: 48px 20px;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 3.5rem;
+  margin-bottom: 12px;
+  opacity: 0.8;
+}
+
+.empty-text {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text-dark);
+  margin-bottom: 4px;
+}
+
+.empty-subtext {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+@media (max-width: 1024px) {
+  .videotron-grid-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ====== Header ====== */
 .lucky-draw-header {
   text-align: center;
@@ -157,7 +213,7 @@ body {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
-  margin: 28px 0;
+  margin: 0 0 24px 0;
 }
 
 .stat-card {
@@ -205,7 +261,6 @@ body {
   word-break: break-word;
 }
 
-/* ====== Panel Cards (Saweria-style thick border cards) ====== */
 .prize-selection-panel,
 .slot-machine-panel {
   background: var(--bg-card);
@@ -214,6 +269,10 @@ body {
   padding: 28px 24px;
   margin-bottom: 24px;
   box-shadow: var(--shadow-card);
+}
+
+.videotron-col-left .slot-machine-panel {
+  margin-bottom: 0;
 }
 
 .panel-card {
@@ -523,85 +582,88 @@ body {
   cursor: not-allowed;
 }
 
-/* ====== Winner Announcement Overlay ====== */
+/* ====== Winner Announcement Overlay (Balanced Medium-Large for Videotron) ====== */
 .winner-announcement-overlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: rgba(26, 26, 26, 0.6);
-  backdrop-filter: blur(6px);
+  background-color: rgba(18, 18, 18, 0.75);
+  backdrop-filter: blur(8px);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 2000;
+  padding: 20px;
 }
 
 .winner-announcement-card {
   position: relative;
   background: var(--bg-card);
-  border: 4px solid #1a1a1a;
-  box-shadow: 8px 8px 0px #1a1a1a;
-  border-radius: 20px;
-  padding: 36px 28px;
-  max-width: 440px;
-  width: 90%;
+  border: 5px solid #1a1a1a;
+  box-shadow: none;
+  border-radius: 28px;
+  padding: 40px 36px;
+  max-width: 780px;
+  width: 94%;
+  max-height: 92vh;
+  overflow-y: auto;
   text-align: center;
-  overflow: hidden;
 }
 
 .celebration-ribbon {
   background: var(--color-orange);
   color: var(--text-dark);
-  padding: 6px 20px;
+  padding: 10px 28px;
   font-weight: 900;
-  font-size: 0.8rem;
+  font-size: 1.15rem;
   letter-spacing: 2px;
-  border-radius: 20px;
-  border: var(--border-thin);
+  border-radius: 30px;
+  border: 3px solid #1a1a1a;
   display: inline-block;
-  margin-bottom: 20px;
-  box-shadow: 2px 2px 0px #1a1a1a;
+  margin-bottom: 22px;
 }
 
 .card-trophy {
-  font-size: 3.5rem;
-  margin-bottom: 12px;
+  font-size: 4.5rem;
+  margin-bottom: 14px;
   animation: bounceIn 0.5s ease;
 }
 
 .prize-won-tag {
   color: var(--color-orange-hover);
-  font-size: 0.9rem;
+  font-size: 1.25rem;
   font-weight: 900;
   letter-spacing: 2px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   text-transform: uppercase;
 }
 
 .winner-name-glow {
-  font-size: 2rem;
+  font-size: 3.2rem;
   font-weight: 900;
   color: var(--text-dark);
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+  line-height: 1.15;
+  letter-spacing: -0.5px;
 }
 
 .winner-instansi-detail {
-  font-size: 0.95rem;
-  font-weight: 700;
+  font-size: 1.25rem;
+  font-weight: 800;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 1px;
-  margin-bottom: 24px;
+  margin-bottom: 26px;
 }
 
 .winner-metadata-box {
   background: var(--bg-warm);
-  border: var(--border-dashed);
-  border-radius: var(--radius);
-  padding: 14px 18px;
-  margin-bottom: 24px;
+  border: 3px dashed #1a1a1a;
+  border-radius: 18px;
+  padding: 18px 24px;
+  margin-bottom: 26px;
   text-align: left;
 }
 
@@ -609,8 +671,8 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6px 0;
-  border-bottom: 1px dashed #ddd;
+  padding: 10px 0;
+  border-bottom: 2px dashed #ddd;
 }
 
 .meta-row:last-child {
@@ -618,34 +680,34 @@ body {
 }
 
 .meta-label {
-  font-size: 0.8rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--text-muted);
 }
 
 .meta-val {
-  font-size: 0.9rem;
-  font-weight: 800;
+  font-size: 1.2rem;
+  font-weight: 900;
   color: var(--text-dark);
 }
 
 .card-footer-note {
-  font-size: 0.78rem;
+  font-size: 1.05rem;
   font-style: italic;
   color: var(--text-muted);
-  line-height: 1.4;
-  margin-bottom: 20px;
+  line-height: 1.45;
+  margin-bottom: 24px;
 }
 
 .btn-close-winner {
   background: var(--text-dark);
   color: #ffffff;
-  border: none;
-  padding: 10px 32px;
-  border-radius: 30px;
+  border: 3px solid var(--color-orange);
+  padding: 14px 44px;
+  border-radius: 40px;
   font-family: var(--font-primary);
-  font-size: 0.9rem;
-  font-weight: 800;
+  font-size: 1.15rem;
+  font-weight: 900;
   cursor: pointer;
   box-shadow: 3px 3px 0px var(--color-orange);
   transition: all 0.15s;
@@ -653,13 +715,13 @@ body {
 }
 
 .btn-close-winner:hover {
-  transform: translate(-1px, -1px);
-  box-shadow: 4px 4px 0px var(--color-orange);
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0px var(--color-orange);
 }
 
 .btn-close-winner:active {
   transform: translate(1px, 1px);
-  box-shadow: 1px 1px 0px var(--color-orange);
+  box-shadow: 2px 2px 0px var(--color-orange);
 }
 
 /* ====== Confetti ====== */
@@ -683,7 +745,11 @@ body {
 
 /* ====== Past Winners Log ====== */
 .past-winners-log {
-  margin-top: 8px;
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
 }
 
 .log-panel-card {
@@ -692,6 +758,10 @@ body {
   border-radius: var(--radius-lg);
   padding: 24px;
   box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
 }
 
 .log-header {
@@ -716,8 +786,7 @@ body {
 .log-table-container {
   width: 100%;
   overflow-x: auto;
-  max-height: 300px;
-  overflow-y: auto;
+  overflow-y: visible;
 }
 
 .log-table-container::-webkit-scrollbar {
@@ -786,6 +855,40 @@ body {
   color: #b5700a;
   font-weight: 800;
   font-size: 0.85rem;
+}
+
+.winner-row-entry.is-gugur {
+  background-color: #fff5f5;
+}
+
+.winner-row-entry.is-gugur td.col-name {
+  text-decoration: line-through;
+  color: #999;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  border: 1.5px solid #1a1a1a;
+  box-shadow: 1.5px 1.5px 0px #1a1a1a;
+}
+
+.status-pill.success {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  border-color: #2e7d32;
+  box-shadow: 1.5px 1.5px 0px #2e7d32;
+}
+
+.status-pill.fail {
+  background-color: #ffebee;
+  color: #c62828;
+  border-color: #c62828;
+  box-shadow: 1.5px 1.5px 0px #c62828;
 }
 
 /* ====== How it Works Section ====== */
@@ -1112,4 +1215,122 @@ body {
   .reset-modal-btn {
     width: 100%;
   }
+}
+
+/* ====== 10-Second Countdown Caller Box (Balanced Medium-Large) ====== */
+.timer-caller-box {
+  background: var(--bg-warm);
+  border: 3px solid #1a1a1a;
+  border-radius: 20px;
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: 4px 4px 0px #1a1a1a;
+  text-align: center;
+}
+
+.timer-display-header {
+  font-size: 1rem;
+  font-weight: 900;
+  color: var(--text-dark);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+}
+
+.timer-number {
+  font-size: 3.8rem;
+  font-weight: 900;
+  color: var(--color-orange-hover);
+  line-height: 1.1;
+  margin-bottom: 10px;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.timer-number.urgent {
+  color: var(--color-red);
+  animation: pulseUrgent 0.5s infinite alternate;
+}
+
+.timer-number.expired {
+  color: #888888;
+}
+
+.timer-unit {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.timer-status-badge.fail {
+  background: #ffebee;
+  border: 3px dashed var(--color-red);
+  color: var(--color-red);
+  padding: 12px 18px;
+  border-radius: 14px;
+  font-size: 1rem;
+  font-weight: 900;
+  margin-bottom: 14px;
+}
+
+.timer-controls {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.btn-timer {
+  font-family: var(--font-primary);
+  font-size: 1rem;
+  font-weight: 900;
+  padding: 10px 24px;
+  border-radius: 40px;
+  border: 3px solid #1a1a1a;
+  cursor: pointer;
+  box-shadow: 3px 3px 0px #1a1a1a;
+  transition: all 0.15s;
+  outline: none;
+}
+
+.btn-timer:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0px #1a1a1a;
+}
+
+.btn-timer:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px #1a1a1a;
+}
+
+.btn-timer.start {
+  background-color: var(--color-yellow);
+  color: var(--text-dark);
+}
+
+.btn-timer.stop {
+  background-color: var(--color-green);
+  color: #ffffff;
+}
+
+.btn-timer.reset {
+  background-color: #ffffff;
+  color: var(--text-dark);
+}
+
+/* Disqualified Modal Card Theme */
+.winner-announcement-card.disqualified {
+  border-color: var(--color-red);
+  box-shadow: none;
+}
+
+.winner-announcement-card.disqualified .celebration-ribbon {
+  background-color: var(--color-red);
+  color: #ffffff;
+  box-shadow: 4px 4px 0px #1a1a1a;
+}
+
+@keyframes pulseUrgent {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.1); }
 }

@@ -46,6 +46,31 @@ const playSound = (type) => {
         osc.start(audioCtx.currentTime + i * 0.08);
         osc.stop(audioCtx.currentTime + i * 0.08 + 0.5);
       });
+    } else if (type === "beep") {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5 high beep
+      gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.1);
+    } else if (type === "fail") {
+      const freqs = [300, 260, 220, 180]; // Low descending tones
+      freqs.forEach((f, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(f, audioCtx.currentTime + i * 0.15);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime + i * 0.15);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + i * 0.15 + 0.3);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(audioCtx.currentTime + i * 0.15);
+        osc.stop(audioCtx.currentTime + i * 0.15 + 0.3);
+      });
     }
   } catch (e) {
     console.error("Audio error:", e);
@@ -92,6 +117,11 @@ const App = () => {
   const [showToast, setShowToast] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
 
+  // Timer states for caller countdown (10s)
+  const [countdown, setCountdown] = useState(10);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [isDisqualified, setIsDisqualified] = useState(false);
+
   // Hard lock to prevent double-click rapid spin (useRef is synchronous, unlike setState)
   const isDrawingRef = useRef(false);
 
@@ -122,7 +152,7 @@ const App = () => {
       );
 
       setNames(eligibleParticipants);
-      
+
       // Seed reel items initially if they are empty
       if (eligibleParticipants.length > 0 && reelItems.length === 0) {
         setReelItems(eligibleParticipants.slice(0, 3));
@@ -169,6 +199,38 @@ const App = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Effect for 10-second caller timer
+  useEffect(() => {
+    let interval = null;
+    if (isTimerRunning && countdown > 0) {
+      interval = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            setIsTimerRunning(false);
+            setIsDisqualified(true);
+            playSound("fail");
+
+            // Mark current winner in pastWinners log as GUGUR
+            setPastWinners((prevLog) => {
+              if (prevLog.length === 0) return prevLog;
+              const updated = [...prevLog];
+              updated[0] = { ...updated[0], isDisqualified: true, statusText: "GUGUR" };
+              localStorage.setItem("sidoarjo_doorprize_winners", JSON.stringify(updated));
+              return updated;
+            });
+
+            return 0;
+          }
+          playSound("beep");
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isTimerRunning, countdown]);
 
   // Helper to mask phone numbers
   const maskPhoneNumber = (phone) => {
@@ -291,6 +353,9 @@ const App = () => {
       setRolling(false);
       setWinner(true);
       setWinnerData(chosenWinner);
+      setCountdown(10);
+      setIsTimerRunning(false);
+      setIsDisqualified(false);
       playSound("win");
 
       // Update winner status in production database via API (with retry)
@@ -298,7 +363,7 @@ const App = () => {
         await updateWinnerStatus(chosenWinner.id, prize);
       }
 
-      // Add to past winners log
+      // Add to past winners log (default: SAH)
       const timeStr = new Date().toLocaleTimeString("id-ID", {
         hour: "2-digit",
         minute: "2-digit",
@@ -308,6 +373,8 @@ const App = () => {
         ...chosenWinner,
         prize: prize,
         drawTime: timeStr,
+        isDisqualified: false,
+        statusText: "SAH",
       };
       setPastWinners((prev) => {
         const updated = [newWinnerRecord, ...prev];
@@ -323,8 +390,38 @@ const App = () => {
   const closeWinnerModal = async () => {
     setWinner(false);
     setWinnerData(null);
+    setIsTimerRunning(false);
+    setCountdown(10);
+    setIsDisqualified(false);
     // Re-sync with API to get fresh eligible list (will exclude winners in DB)
     await fetchData();
+  };
+
+  const startTimer = () => {
+    if (countdown > 0) {
+      setIsTimerRunning(true);
+      playSound("beep");
+    }
+  };
+
+  const stopTimer = () => {
+    setIsTimerRunning(false);
+  };
+
+  const resetTimer = () => {
+    setIsTimerRunning(false);
+    setCountdown(10);
+    setIsDisqualified(false);
+    // Restore status back to SAH if reset before close
+    setPastWinners((prevLog) => {
+      if (prevLog.length === 0) return prevLog;
+      const updated = [...prevLog];
+      if (updated[0].statusText === "GUGUR") {
+        updated[0] = { ...updated[0], isDisqualified: false, statusText: "SAH" };
+        localStorage.setItem("sidoarjo_doorprize_winners", JSON.stringify(updated));
+      }
+      return updated;
+    });
   };
 
   const resetLottery = () => {
@@ -346,16 +443,6 @@ const App = () => {
 
   return (
     <div className="lucky-draw-root">
-      {/* Saweria-style Dark Top Bar */}
-      <div className="top-bar">
-        <div className="top-bar-left">
-          <span className="dot"></span>
-          <span>Sidoarjo Lucky Draw — LIVE</span>
-        </div>
-        <div className="top-bar-right">
-          <span className="top-bar-badge">🎁 Doorprize Event</span>
-        </div>
-      </div>
 
       {/* Toast Alert */}
       {showToast && (
@@ -367,7 +454,7 @@ const App = () => {
       {/* Confetti Celebration */}
       {winner && <Confetti />}
 
-      <div className="lucky-draw-container">
+      <div className="lucky-draw-container wide-layout">
         {/* Header */}
         <header className="lucky-draw-header">
           <div className="logo-wrapper">
@@ -393,143 +480,201 @@ const App = () => {
           </div>
         </section>
 
-        {/* Prize Selector */}
-        <section className="prize-selection-panel">
-          <div className="panel-card">
-            <div className="card-header-icon">🎁</div>
-            <h3 className="panel-title">Langkah 1: Pilih Hadiah Menarik</h3>
-            <div className="select-dropdown-wrapper">
-              <select
-                value={prize}
-                onChange={(e) => setPrize(e.target.value)}
-                className="custom-dropdown"
-                disabled={rolling}
-              >
-                <option value="" disabled hidden>
-                  -- Silakan Pilih Hadiah --
-                </option>
-                <option value="tv lg 55 inch">📺 TV LG 55 Inch</option>
-                <option value="sepeda listrik">⚡ Sepeda Listrik</option>
-                <option value="lemari es 2 pintu polytron">🥶 Lemari Es 2 Pintu Polytron</option>
-                <option value="huawe watch fit 3">⌚ Huawei Watch FIT 3</option>
-                <option value="tv 32 inch">📺 TV 32"</option>
-                <option value="huawe watch gt 5">⌚ Huawei Watch GT 5</option>
-                <option value="sepeda phoenix">🚲 Sepeda Phoenix</option>
-                <option value="sepeda trex">🚲 Sepeda Trex</option>
-                <option value="hp redmi a5">📱 HP Redmi A5</option>
-                <option value="magiccom miyako">🍚 MagicCom Miyako</option>
-                <option value="magiccom">🍚 MagicCom</option>
-                <option value="oven">🍪 Oven</option>
-                <option value="almari plastik">🗄️ Almari Plastik</option>
-                <option value="tabungan delta arta 500k">💰 Tabungan Delta Art @Rp.500.000</option>
-                <option value="kominfo jatim 500k">💰 Kominfo Jatim 500k</option>
-                <option value="tabungan bank jatim">💰 Tabungan Bank Jatim</option>
-                <option value="set alat makan">🍽️ Set Alat Makan</option>
-                <option value="kompor gas rinai">🔥 Kompor Gas Rinai</option>
-                <option value="kompor gas miyako">🔥 Kompor Gas Miyako</option>
-                <option value="kipas angin miyako">🌀 Kipas Angin Miyako</option>
-                <option value="kipas angin">🌀 Kipas Angin</option>
-                <option value="set cangkir">🍵 Set Cangkir</option>
-                <option value="setrika listrik">👔 Setrika Listrik</option>
-                <option value="setrika maspion">👔 Setrika Maspion</option>
-                <option value="setrika">👔 Setrika</option>
-                <option value="blender maspion">🧃 Blender Maspion</option>
-                <option value="dispenser miyako">🚰 Dispenser Miyako</option>
-                <option value="payung">☂️ Payung</option>
-                <option value="mug">☕ Mug</option>
-                <option value="tumbler">💧 Tumbler</option>
-                <option value="bantal">🛏️ Bantal</option>
-                <option value="headphone">🎧 Headphone</option>
-                <option value="rice cooker philip">🍚 Rice Cooker Philip</option>
-              </select>
-            </div>
-          </div>
-        </section>
-
-        {/* Slot Machine Area */}
-        <section className="slot-machine-panel">
-          <h3 className="panel-title text-center mb-3">Langkah 2: Putar Roda Keberuntungan</h3>
-          
-          <div className="slot-machine-console">
-            <div className={`console-neon-bar left ${rolling ? "rolling" : ""}`}></div>
-            <div className={`console-neon-bar right ${rolling ? "rolling" : ""}`}></div>
-            
-            <div className="slot-machine-viewport">
-              {/* Highlight selection box */}
-              <div className="slot-machine-highlight-box">
-                <div className="arrow left">▶</div>
-                <div className="arrow right">◀</div>
-              </div>
-              
-              {/* Scrollable Reel */}
-              <div
-                className={`slot-machine-reel ${rolling ? "is-spinning" : ""}`}
-                style={{
-                  transform: `translateY(-${translateY}px)`,
-                  transition: transitionStyle,
-                }}
-              >
-                {reelItems.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className={`slot-machine-item ${
-                      idx === activeIndex && winner ? "is-winner" : ""
-                    }`}
+        {/* 2-Column Side-by-Side Dashboard Layout for Videotron */}
+        <div className="videotron-grid-layout">
+          {/* Left Column: Controls & Slot Wheel */}
+          <div className="videotron-col-left">
+            {/* Prize Selector */}
+            <section className="prize-selection-panel">
+              <div className="panel-card">
+                <div className="card-header-icon">🎁</div>
+                <h3 className="panel-title">Langkah 1: Pilih Hadiah Menarik</h3>
+                <div className="select-dropdown-wrapper">
+                  <select
+                    value={prize}
+                    onChange={(e) => setPrize(e.target.value)}
+                    className="custom-dropdown"
+                    disabled={rolling}
                   >
-                    {item ? (
-                      <div className="slot-item-card">
-                        <div className="slot-item-name">{item.nama}</div>
-                        <div className="slot-item-instansi">
-                          {item.instansi || "Peserta"}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="slot-item-card placeholder">
-                        <div className="slot-item-name">---</div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                    <option value="" disabled hidden>
+                      -- Silakan Pilih Hadiah --
+                    </option>
+                    <option value="tv lg 55 inch">📺 TV LG 55 Inch</option>
+                    <option value="sepeda listrik">⚡ Sepeda Listrik</option>
+                    <option value="lemari es 2 pintu polytron">🥶 Lemari Es 2 Pintu Polytron</option>
+                    <option value="huawe watch fit 3">⌚ Huawei Watch FIT 3</option>
+                    <option value="tv 32 inch">📺 TV 32"</option>
+                    <option value="huawe watch gt 5">⌚ Huawei Watch GT 5</option>
+                    <option value="sepeda phoenix">🚲 Sepeda Phoenix</option>
+                    <option value="sepeda trex">🚲 Sepeda Trex</option>
+                    <option value="hp redmi a5">📱 HP Redmi A5</option>
+                    <option value="magiccom miyako">🍚 MagicCom Miyako</option>
+                    <option value="magiccom">🍚 MagicCom</option>
+                    <option value="oven">🍪 Oven</option>
+                    <option value="almari plastik">🗄️ Almari Plastik</option>
+                    <option value="tabungan delta arta 500k">💰 Tabungan Delta Art @Rp.500.000</option>
+                    <option value="kominfo jatim 500k">💰 Kominfo Jatim 500k</option>
+                    <option value="tabungan bank jatim">💰 Tabungan Bank Jatim</option>
+                    <option value="set alat makan">🍽️ Set Alat Makan</option>
+                    <option value="kompor gas rinai">🔥 Kompor Gas Rinai</option>
+                    <option value="kompor gas miyako">🔥 Kompor Gas Miyako</option>
+                    <option value="kipas angin miyako">🌀 Kipas Angin Miyako</option>
+                    <option value="kipas angin">🌀 Kipas Angin</option>
+                    <option value="set cangkir">🍵 Set Cangkir</option>
+                    <option value="setrika listrik">👔 Setrika Listrik</option>
+                    <option value="setrika maspion">👔 Setrika Maspion</option>
+                    <option value="setrika">👔 Setrika</option>
+                    <option value="blender maspion">🧃 Blender Maspion</option>
+                    <option value="dispenser miyako">🚰 Dispenser Miyako</option>
+                    <option value="payung">☂️ Payung</option>
+                    <option value="mug">☕ Mug</option>
+                    <option value="tumbler">💧 Tumbler</option>
+                    <option value="bantal">🛏️ Bantal</option>
+                    <option value="headphone">🎧 Headphone</option>
+                    <option value="rice cooker philip">🍚 Rice Cooker Philip</option>
+                  </select>
+                </div>
               </div>
-            </div>
+            </section>
+
+            {/* Slot Machine Area */}
+            <section className="slot-machine-panel">
+              <h3 className="panel-title text-center mb-3">Langkah 2: Putar Roda Keberuntungan</h3>
+
+              <div className="slot-machine-console">
+                <div className={`console-neon-bar left ${rolling ? "rolling" : ""}`}></div>
+                <div className={`console-neon-bar right ${rolling ? "rolling" : ""}`}></div>
+
+                <div className="slot-machine-viewport">
+                  {/* Highlight selection box */}
+                  <div className="slot-machine-highlight-box">
+                    <div className="arrow left">▶</div>
+                    <div className="arrow right">◀</div>
+                  </div>
+
+                  {/* Scrollable Reel */}
+                  <div
+                    className={`slot-machine-reel ${rolling ? "is-spinning" : ""}`}
+                    style={{
+                      transform: `translateY(-${translateY}px)`,
+                      transition: transitionStyle,
+                    }}
+                  >
+                    {reelItems.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className={`slot-machine-item ${idx === activeIndex && winner ? "is-winner" : ""
+                          }`}
+                      >
+                        {item ? (
+                          <div className="slot-item-card">
+                            <div className="slot-item-name">{item.nama}</div>
+                            <div className="slot-item-instansi">
+                              {item.instansi || "Peserta"}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="slot-item-card placeholder">
+                            <div className="slot-item-name">---</div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="console-controls">
+                <button
+                  className="btn-draw-main"
+                  onClick={startDraw}
+                  disabled={rolling || eligibleCount === 0 || isRefreshing}
+                >
+                  <span className="btn-text">
+                    {rolling ? "MENGACAK NAMA..." : isRefreshing ? "SINKRONISASI DATA..." : "ACAK PEMENANG"}
+                  </span>
+                  <span className="btn-glow"></span>
+                </button>
+
+                <button
+                  className="btn-reset-secondary"
+                  onClick={resetLottery}
+                  disabled={rolling}
+                >
+                  Reset Winner Log
+                </button>
+              </div>
+            </section>
           </div>
 
-          <div className="console-controls">
-            <button
-              className="btn-draw-main"
-              onClick={startDraw}
-              disabled={rolling || eligibleCount === 0 || isRefreshing}
-            >
-              <span className="btn-text">
-                {rolling ? "MENGACAK NAMA..." : isRefreshing ? "SINKRONISASI DATA..." : "ACAK PEMENANG"}
-              </span>
-              <span className="btn-glow"></span>
-            </button>
+          {/* Right Column: Real-Time Past Winners Log */}
+          <div className="videotron-col-right">
+            <section className="past-winners-log animate-fade-in full-height">
+              <div className="log-panel-card">
+                <div className="log-header">
+                  <span className="log-icon">📜</span>
+                  <h3 className="log-title">Daftar Pemenang Terkini</h3>
+                </div>
 
-            <button
-              className="btn-reset-secondary"
-              onClick={resetLottery}
-              disabled={rolling}
-            >
-              Reset Winner Log
-            </button>
+                {pastWinners.length > 0 ? (
+                  <div className="log-table-container">
+                    <table className="log-table">
+                      <thead>
+                        <tr>
+                          <th>Waktu</th>
+                          <th>Nama Pemenang</th>
+                          <th>Peserta</th>
+                          <th>Hadiah</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pastWinners.map((w, idx) => (
+                          <tr key={idx} className={`winner-row-entry ${w.isDisqualified || w.statusText === "GUGUR" ? "is-gugur" : ""}`}>
+                            <td className="col-time">{w.drawTime}</td>
+                            <td className="col-name">{w.nama}</td>
+                            <td className="col-instansi">{w.instansi || "Peserta"}</td>
+                            <td className="col-prize">🎁 {w.prize.toUpperCase()}</td>
+                            <td className="col-status">
+                              {w.isDisqualified || w.statusText === "GUGUR" ? (
+                                <span className="status-pill fail">❌ GUGUR</span>
+                              ) : (
+                                <span className="status-pill success">✅ SAH</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="empty-winners-placeholder">
+                    <div className="empty-icon">🏆</div>
+                    <p className="empty-text">Belum ada pemenang yang terundi.</p>
+                    <p className="empty-subtext">Pilih hadiah dan klik "ACAK PEMENANG" untuk memulai.</p>
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
-        </section>
+        </div>
 
         {/* Winner Showcase Modal/Card */}
         {winner && winnerData && (
           <section className="winner-announcement-overlay">
-            <div className="winner-announcement-card animate-zoom-in">
-              <div className="celebration-ribbon">🏆 PEMENANG UTAMA 🏆</div>
-              
-              <div className="card-trophy">🎉</div>
-              
+            <div className={`winner-announcement-card animate-zoom-in ${isDisqualified ? "disqualified" : ""}`}>
+              <div className="celebration-ribbon">
+                {isDisqualified ? "❌ PEMENANG GUGUR ❌" : "🏆 PEMENANG UTAMA 🏆"}
+              </div>
+
+              <div className="card-trophy">{isDisqualified ? "❌" : "🎉"}</div>
+
               <div className="winner-details">
                 <p className="prize-won-tag">MEMENANGKAN {prize.toUpperCase()}</p>
-                
+
                 <h2 className="winner-name-glow">{winnerData.nama}</h2>
                 <h4 className="winner-instansi-detail">{winnerData.instansi || "Peserta"}</h4>
-                
+
                 <div className="winner-metadata-box">
                   <div className="meta-row">
                     <span className="meta-label">Nomor Telepon</span>
@@ -548,61 +693,48 @@ const App = () => {
                   </div>
                 </div>
               </div>
-              
+
+              {/* Countdown Timer Calling Box */}
+              <div className="timer-caller-box">
+                <div className="timer-display-header">⏱️ Hitung Mundur Panggilan (10 Detik)</div>
+                <div className={`timer-number ${countdown <= 3 && countdown > 0 ? "urgent" : ""} ${isDisqualified ? "expired" : ""}`}>
+                  {countdown} <span className="timer-unit">Detik</span>
+                </div>
+
+                {isDisqualified && (
+                  <div className="timer-status-badge fail">
+                    ⚠️ Waktu habis! Peserta dianggap GUGUR / Tidak Ada di Tempat.
+                  </div>
+                )}
+
+                <div className="timer-controls">
+                  {!isTimerRunning && countdown > 0 && (
+                    <button className="btn-timer start" onClick={startTimer}>
+                      ▶️ Mulai Hitung (10s)
+                    </button>
+                  )}
+                  {isTimerRunning && (
+                    <button className="btn-timer stop" onClick={stopTimer}>
+                      ⏸️ Hentikan Counter (Hadir)
+                    </button>
+                  )}
+                  {(isDisqualified || countdown < 10) && (
+                    <button className="btn-timer reset" onClick={resetTimer}>
+                      🔄 Reset Timer (10s)
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <p className="card-footer-note">
-                Selamat! Hubungi Panitia / Dinas Kominfo Sidoarjo untuk penyerahan hadiah.
+                {isDisqualified
+                  ? "Status peserta telah tercatat. Tutup modal untuk melakukan pengundian ulang."
+                  : "Selamat! Hubungi Panitia / Dinas Kominfo Sidoarjo untuk penyerahan hadiah."}
               </p>
-              
+
               <button className="btn-close-winner" onClick={closeWinnerModal}>
-                Tutup
+                {isDisqualified ? "Tutup & Diundi Lagi" : "Tutup"}
               </button>
-            </div>
-          </section>
-        )}
-
-        {/* How it Works Section - Saweria style */}
-        <section className="how-it-works">
-          <div className="how-it-works-title">cara memulai</div>
-          <ol>
-            <li>Pilih hadiah yang ingin diundi pada langkah 1</li>
-            <li>Klik tombol <strong>"ACAK PEMENANG"</strong> untuk memulai pengundian</li>
-            <li>Tunggu hingga roda berhenti berputar</li>
-            <li>Pemenang akan ditampilkan secara otomatis</li>
-            <li>Data pemenang tersimpan di database dan ditampilkan di bawah</li>
-          </ol>
-        </section>
-
-        {/* History of Winners Log */}
-        {pastWinners.length > 0 && (
-          <section className="past-winners-log animate-fade-in">
-            <div className="log-panel-card">
-              <div className="log-header">
-                <span className="log-icon">📜</span>
-                <h3 className="log-title">Daftar Pemenang Terkini</h3>
-              </div>
-              
-              <div className="log-table-container">
-                <table className="log-table">
-                  <thead>
-                    <tr>
-                      <th>Waktu</th>
-                      <th>Nama Pemenang</th>
-                      <th>Peserta</th>
-                      <th>Hadiah</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pastWinners.map((w, idx) => (
-                      <tr key={idx} className="winner-row-entry">
-                        <td className="col-time">{w.drawTime}</td>
-                        <td className="col-name">{w.nama}</td>
-                        <td className="col-instansi">{w.instansi || "Peserta"}</td>
-                        <td className="col-prize">🎁 {w.prize.toUpperCase()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
             </div>
           </section>
         )}
@@ -616,11 +748,11 @@ const App = () => {
             <div className="reset-modal-icon">
               <img src={sidoarjoImage} alt="Logo Sidoarjo" className="reset-modal-logo" />
             </div>
-            
+
             <h3 className="reset-modal-title">Reset Data Pemenang?</h3>
-            
+
             <p className="reset-modal-desc">
-              Seluruh daftar pemenang lokal akan dihapus dan hadiah yang dipilih akan direset. 
+              Seluruh daftar pemenang lokal akan dihapus dan hadiah yang dipilih akan direset.
               Data peserta akan disinkronkan ulang dari server.
             </p>
 
@@ -632,14 +764,14 @@ const App = () => {
             </div>
 
             <div className="reset-modal-actions">
-              <button 
-                className="reset-modal-btn cancel" 
+              <button
+                className="reset-modal-btn cancel"
                 onClick={() => setShowResetModal(false)}
               >
                 Batal
               </button>
-              <button 
-                className="reset-modal-btn confirm" 
+              <button
+                className="reset-modal-btn confirm"
                 onClick={confirmReset}
               >
                 Ya, Reset Sekarang
