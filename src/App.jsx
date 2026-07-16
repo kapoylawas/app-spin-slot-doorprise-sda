@@ -4,8 +4,8 @@ import sidoarjoImage from "../public/sidoarjo.png";
 import axios from "axios";
 
 // Server API Configuration
-const API_BASE_URL = "http://10.1.18.99/api";
-// const API_BASE_URL = "http://localhost:8000/api";
+// const API_BASE_URL = "http://10.1.18.99/api";
+const API_BASE_URL = "http://localhost:8000/api";
 const API_TOKEN = "2|ydUqZdX4zdz68SIW6uPFAauTJUPTXfZhp3BjOEbne110bd43";
 
 const getApiHeaders = () => ({
@@ -133,6 +133,7 @@ const App = () => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("⚠️ Silakan pilih hadiah terlebih dahulu sebelum mengacak!");
   const [showResetModal, setShowResetModal] = useState(false);
+  const [cancelTargetWinner, setCancelTargetWinner] = useState(null);
 
   // Timer states for caller countdown (10s)
   const [countdown, setCountdown] = useState(10);
@@ -148,9 +149,9 @@ const App = () => {
   const [translateY, setTranslateY] = useState(0);
   const [transitionStyle, setTransitionStyle] = useState("none");
 
-  // Fetch data from local API
-  const fetchData = async () => {
-    setIsRefreshing(true);
+  // Fetch data from local API (isSilent = true for background polling without UI flickering)
+  const fetchData = async (isSilent = false) => {
+    if (!isSilent) setIsRefreshing(true);
     try {
       const [participantsRes, prizesRes, resultsRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/draw/participants`, { headers: getApiHeaders() }),
@@ -194,6 +195,7 @@ const App = () => {
       // 3. Process Results Data (Draw History)
       const fetchedResults = (resultsRes.data?.data || []).map((r) => ({
         id: r.participant_id,
+        prizeId: r.prize_id,
         nama: r.participant?.name || "Peserta",
         nik: r.participant?.nik ? String(r.participant.nik) : "-",
         maskedNik: r.participant?.nik ? maskNik(r.participant.nik) : (r.participant?.instansi || r.participant?.kab_name || "Peserta"),
@@ -220,7 +222,7 @@ const App = () => {
         setPrizesList(DUMMY_PRIZES);
       }
     } finally {
-      setIsRefreshing(false);
+      if (!isSilent) setIsRefreshing(false);
     }
   };
 
@@ -241,6 +243,20 @@ const App = () => {
       return true;
     } catch (error) {
       console.error("Gagal menyimpan hasil undian ke API server:", error?.response?.data || error.message);
+      return false;
+    }
+  };
+
+  const cancelDrawResult = async (participantId) => {
+    try {
+      const payload = { participant_id: participantId };
+      const res = await axios.post(`${API_BASE_URL}/draw/results/cancel`, payload, {
+        headers: getApiHeaders(),
+      });
+      console.log("Hasil undian berhasil dibatalkan dari server:", res.data);
+      return true;
+    } catch (error) {
+      console.error("Gagal membatalkan hasil undian di API server:", error?.response?.data || error.message);
       return false;
     }
   };
@@ -267,23 +283,17 @@ const App = () => {
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
-  // Auto-polling for MC view to get realtime updates when spin occurs
-  useEffect(() => {
-    let interval;
-    if (viewMode === "mc") {
-      fetchData();
-      interval = setInterval(() => {
-        fetchData();
-      }, 2500);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [viewMode]);
-
-  // Fetch initial data on load
+  // Continuous Realtime Auto-polling every 2.5 seconds for both Videotron (#spin) and MC (#mc) views
   useEffect(() => {
     fetchData();
+    const interval = setInterval(() => {
+      // Only auto-fetch silently in background when spin animation is not active
+      if (!isDrawingRef.current) {
+        fetchData(true);
+      }
+    }, 2500);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Effect for 10-second caller timer
@@ -385,9 +395,6 @@ const App = () => {
     // GUARD 2: Synchronous ref lock — prevents double-click race condition
     if (isDrawingRef.current) return;
 
-    // GUARD 3: Block during data refresh
-    if (isRefreshing) return;
-
     // GUARD 4: Build eligible list — exclude anyone with status_peserta set
     const eligible = names.filter((peserta) => !peserta.status_peserta);
 
@@ -435,22 +442,23 @@ const App = () => {
       newReel[i] = reelItems[i] || shuffledPool[i % shuffledPool.length];
     }
 
-    // Winner will be centered at index 140
-    newReel[140] = chosenWinner;
+    // Winner will be centered in the highlight box at index 144 (viewport offset 4 + 140 scrolled slots = 144)
+    const TARGET_WINNER_INDEX = 144;
+    newReel[TARGET_WINNER_INDEX] = chosenWinner;
 
     // Fill all other slots (4 to 159) sequentially from shuffled pool (zero duplicate names in 10-item window)
     const winnerPos = shuffledPool.findIndex((p) => p.id === chosenWinner.id);
     const validWinnerPos = winnerPos >= 0 ? winnerPos : 0;
     for (let i = 4; i < 160; i++) {
-      if (i === 140) continue;
-      const offset = 140 - i;
+      if (i === TARGET_WINNER_INDEX) continue;
+      const offset = TARGET_WINNER_INDEX - i;
       const pos = ((validWinnerPos - offset) % shuffledPool.length + shuffledPool.length * 1000) % shuffledPool.length;
       newReel[i] = shuffledPool[pos];
     }
 
     // Set reel items and reset translate position to 0 instantly
     setReelItems(newReel);
-    setActiveIndex(140);
+    setActiveIndex(TARGET_WINNER_INDEX);
     setTranslateY(0);
     setTransitionStyle("none");
 
@@ -484,6 +492,31 @@ const App = () => {
       // Release the draw lock
       isDrawingRef.current = false;
     }, 10050);
+  };
+
+  const handleCancelWinner = (winnerItem) => {
+    if (!winnerItem || !winnerItem.id) return;
+    setCancelTargetWinner(winnerItem);
+  };
+
+  const confirmCancelWinner = async () => {
+    if (!cancelTargetWinner) return;
+    const winnerItem = cancelTargetWinner;
+    setCancelTargetWinner(null);
+    setIsRefreshing(true);
+
+    const success = await cancelDrawResult(winnerItem.id);
+    if (success) {
+      playSound("fail");
+      setToastMessage(`✅ Kemenangan ${winnerItem.nama} dibatalkan. Peserta telah dikembalikan ke daftar acak spinner & kuota ${winnerItem.prize} dikembalikan!`);
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 5000);
+    } else {
+      setToastMessage("⚠️ Gagal membatalkan kemenangan di server. Silakan coba lagi.");
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 5000);
+    }
+    await fetchData();
   };
 
   const closeWinnerModal = async () => {
@@ -656,7 +689,16 @@ const App = () => {
                       {pastWinners[0].isDisqualified || pastWinners[0].statusText === "HANGUS" ? (
                         <span style={{ color: "var(--color-red)", fontWeight: "900" }}>❌ HANGUS</span>
                       ) : (
-                        <span style={{ color: "var(--color-green)", fontWeight: "900" }}>✅ SAH</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <span style={{ color: "var(--color-green)", fontWeight: "900" }}>✅ SAH</span>
+                          <button
+                            className="btn-cancel-winner"
+                            onClick={() => handleCancelWinner(pastWinners[0])}
+                            style={{ marginTop: 0, padding: "4px 10px", fontSize: "0.8rem" }}
+                          >
+                            🚫 Batalkan Pemenang (Kuota Kembali)
+                          </button>
+                        </div>
                       )}
                     </span>
                   </div>
@@ -717,7 +759,7 @@ const App = () => {
                       <th>Kota / Kabupaten</th>
                       <th>No. Telepon (Lengkap)</th>
                       <th>Hadiah</th>
-                      <th>Status</th>
+                      <th>Status & Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -745,7 +787,16 @@ const App = () => {
                             {w.isDisqualified || w.statusText === "HANGUS" ? (
                               <span className="status-pill fail">❌ HANGUS</span>
                             ) : (
-                              <span className="status-pill success">✅ SAH</span>
+                              <div style={{ display: "flex", alignItems: "center" }}>
+                                <span className="status-pill success">✅ SAH</span>
+                                <button
+                                  className="btn-table-cancel"
+                                  onClick={() => handleCancelWinner(w)}
+                                  title="Batalkan kemenangan & kembalikan kuota hadiah"
+                                >
+                                  🚫 Batalkan
+                                </button>
+                              </div>
                             )}
                           </td>
                         </tr>
@@ -875,20 +926,18 @@ const App = () => {
                   <button
                     className="btn-draw-main"
                     onClick={startDraw}
-                    disabled={rolling || eligibleCount === 0 || isRefreshing || isPrizeQuotaExhausted}
+                    disabled={rolling || eligibleCount === 0 || isPrizeQuotaExhausted}
                   >
                     <span className="btn-text">
                       {rolling
                         ? "MENGACAK NAMA..."
-                        : isRefreshing
-                          ? "SINKRONISASI DATA..."
-                          : eligibleCount === 0
-                            ? "SEMUA PESERTA SUDAH DIUNDI"
-                            : !selectedPrizeId
-                              ? "PILIH HADIAH TERLEBIH DAHULU"
-                              : isPrizeQuotaExhausted
-                                ? "KUOTA HADIAH HABIS"
-                                : "ACAK PEMENANG"}
+                        : eligibleCount === 0
+                          ? "SEMUA PESERTA SUDAH DIUNDI"
+                          : !selectedPrizeId
+                            ? "PILIH HADIAH TERLEBIH DAHULU"
+                            : isPrizeQuotaExhausted
+                              ? "KUOTA HADIAH HABIS"
+                              : "ACAK PEMENANG"}
                     </span>
                     <span className="btn-glow"></span>
                   </button>
@@ -1075,6 +1124,48 @@ const App = () => {
                 onClick={confirmReset}
               >
                 Ya, Reset Sekarang
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancellation Confirmation Modal */}
+      {cancelTargetWinner && (
+        <div className="cancel-modal-overlay" onClick={() => setCancelTargetWinner(null)}>
+          <div className="cancel-modal-card animate-zoom-in" onClick={(e) => e.stopPropagation()}>
+            <div className="cancel-modal-badge">
+              <span>🚫 KONFIRMASI PEMBATALAN PEMENANG</span>
+            </div>
+
+            <h3 className="cancel-modal-title">Batalkan Kemenangan Peserta Ini?</h3>
+
+            <div className="cancel-winner-preview">
+              <div className="cancel-winner-name">{cancelTargetWinner.nama}</div>
+              <div className="cancel-winner-meta">
+                <span>🎁 Hadiah: {cancelTargetWinner.prize ? cancelTargetWinner.prize.toUpperCase() : "-"}</span>
+                <span>🆔 NIK: {cancelTargetWinner.nik !== "-" ? cancelTargetWinner.nik : "---"}</span>
+                <span>🏛️ Kota/Kab: {cancelTargetWinner.instansi || cancelTargetWinner.kab_name || "Peserta"}</span>
+                <span>📞 Telp: {cancelTargetWinner.phone || "---"}</span>
+              </div>
+            </div>
+
+            <div className="cancel-warning-box">
+              🔄 Nama peserta akan <strong>DIKEMBALIKAN KE DAFTAR ACAK SPINNER</strong> (dapat diundi kembali), dan 1 kuota hadiah <strong>{cancelTargetWinner.prize}</strong> akan dikembalikan ke server secara real-time.
+            </div>
+
+            <div className="cancel-modal-actions">
+              <button
+                className="btn-modal-cancel"
+                onClick={() => setCancelTargetWinner(null)}
+              >
+                Batal
+              </button>
+              <button
+                className="btn-modal-confirm-delete"
+                onClick={confirmCancelWinner}
+              >
+                Ya, Batalkan Pemenang
               </button>
             </div>
           </div>
