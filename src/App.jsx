@@ -4,7 +4,8 @@ import sidoarjoImage from "../public/sidoarjo.png";
 import axios from "axios";
 
 // Server API Configuration
-const API_BASE_URL = "http://10.1.18.99/api";
+// const API_BASE_URL = "http://10.1.18.99/api";
+const API_BASE_URL = "http://localhost:8000/api";
 const API_TOKEN = "2|ydUqZdX4zdz68SIW6uPFAauTJUPTXfZhp3BjOEbne110bd43";
 
 const getApiHeaders = () => ({
@@ -166,8 +167,14 @@ const App = () => {
       setNames(fetchedParticipants);
 
       // Seed/update reel items with remaining eligible participants when not actively drawing
-      if (fetchedParticipants.length > 0 && !isDrawingRef.current) {
-        setReelItems(fetchedParticipants.slice(0, 3));
+      if (!isDrawingRef.current) {
+        if (fetchedParticipants.length > 0) {
+          setReelItems(fetchedParticipants.slice(0, 3));
+        } else {
+          // All participants have been drawn
+          const emptyPlaceholder = { nama: "Semua Peserta Sudah Diundi", instansi: "Sisa Peserta: 0" };
+          setReelItems([emptyPlaceholder, emptyPlaceholder, emptyPlaceholder]);
+        }
         setActiveIndex(1);
         setTranslateY(0);
         setTransitionStyle("none");
@@ -244,15 +251,15 @@ const App = () => {
             setIsDisqualified(true);
             playSound("fail");
 
-            // Mark current winner in pastWinners log as GUGUR
+            // Mark current winner in pastWinners log as HANGUS
             setPastWinners((prevLog) => {
               if (prevLog.length === 0) return prevLog;
               const updated = [...prevLog];
-              updated[0] = { ...updated[0], isDisqualified: true, statusText: "GUGUR", prize: "GUGUR" };
+              updated[0] = { ...updated[0], isDisqualified: true, statusText: "HANGUS" };
               return updated;
             });
 
-            // Submit hangus status to API server and restore prize quota
+            // Submit hangus status to API server (quota remains consumed)
             if (winnerData && winnerData.id) {
               submitDrawResult(winnerData.id, selectedPrizeId, "hangus").then(() => {
                 fetchData();
