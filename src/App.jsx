@@ -165,9 +165,12 @@ const App = () => {
       }));
       setNames(fetchedParticipants);
 
-      // Seed reel items initially if empty
-      if (fetchedParticipants.length > 0 && reelItems.length === 0) {
+      // Seed/update reel items with remaining eligible participants when not actively drawing
+      if (fetchedParticipants.length > 0 && !isDrawingRef.current) {
         setReelItems(fetchedParticipants.slice(0, 3));
+        setActiveIndex(1);
+        setTranslateY(0);
+        setTransitionStyle("none");
       }
 
       // 2. Process Prizes Data
@@ -179,14 +182,14 @@ const App = () => {
         id: r.participant_id,
         nama: r.participant?.name || "Peserta",
         instansi: r.participant?.nik ? `NIK: ${r.participant.nik}` : "Peserta",
-        prize: r.prize?.name || (r.result_type === "hangus" ? "GUGUR" : "-"),
+        prize: r.prize?.name || "-",
         drawTime: new Date(r.submitted_at || r.created_at).toLocaleTimeString("id-ID", {
           hour: "2-digit",
           minute: "2-digit",
           second: "2-digit",
         }),
         isDisqualified: r.result_type === "hangus",
-        statusText: r.result_type === "menang" ? "SAH" : "GUGUR",
+        statusText: r.result_type === "menang" ? "SAH" : "HANGUS",
       }));
       setPastWinners(fetchedResults);
 
@@ -245,9 +248,16 @@ const App = () => {
             setPastWinners((prevLog) => {
               if (prevLog.length === 0) return prevLog;
               const updated = [...prevLog];
-              updated[0] = { ...updated[0], isDisqualified: true, statusText: "GUGUR" };
+              updated[0] = { ...updated[0], isDisqualified: true, statusText: "GUGUR", prize: "GUGUR" };
               return updated;
             });
+
+            // Submit hangus status to API server and restore prize quota
+            if (winnerData && winnerData.id) {
+              submitDrawResult(winnerData.id, selectedPrizeId, "hangus").then(() => {
+                fetchData();
+              });
+            }
 
             return 0;
           }
@@ -259,7 +269,7 @@ const App = () => {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isTimerRunning, countdown]);
+  }, [isTimerRunning, countdown, winnerData, selectedPrizeId]);
 
   // Helper to mask phone numbers
   const maskPhoneNumber = (phone) => {
@@ -334,12 +344,8 @@ const App = () => {
     const targetIdx = Math.floor(randomValue * safeEligible.length);
     const chosenWinner = safeEligible[targetIdx];
 
-    // Immediately mark as ineligible in local state to prevent any re-selection
-    setNames((prevNames) =>
-      prevNames.map((p) =>
-        p.id === chosenWinner.id ? { ...p, status_peserta: "1" } : p
-      )
-    );
+    // Immediately remove chosen winner from local candidate list state to prevent re-selection
+    setNames((prevNames) => prevNames.filter((p) => p.id !== chosenWinner.id));
 
     // Seed index 0, 1, 2 with currently visible items to prevent jumpiness
     const currentTop = reelItems[activeIndex - 1] || safeEligible[0];
@@ -441,14 +447,23 @@ const App = () => {
     setShowResetModal(true);
   };
 
-  const confirmReset = () => {
-    setPastWinners([]);
-    setWinner(false);
-    setWinnerData(null);
-    setPrize("");
-    setSelectedPrizeId("");
-    setShowResetModal(false);
-    fetchData(); // Re-sync with API
+  const confirmReset = async () => {
+    try {
+      const res = await axios.post(`${API_BASE_URL}/draw/reset`, {}, { headers: getApiHeaders() });
+      if (res.data?.status === "success") {
+        setPastWinners([]);
+        setWinner(false);
+        setWinnerData(null);
+        setPrize("");
+        setSelectedPrizeId("");
+      }
+    } catch (e) {
+      console.error("Gagal melakukan reset ke API server:", e);
+      alert("⚠️ Gagal melakukan reset di server API (10.1.18.99)! File backend di server belum diupdate dengan endpoint /draw/reset.");
+    } finally {
+      setShowResetModal(false);
+      await fetchData(); // Re-sync with API
+    }
   };
 
   const eligibleCount = names.filter((peserta) => !peserta.status_peserta).length;
@@ -589,10 +604,18 @@ const App = () => {
 
                 <button
                   className="btn-reset-secondary"
-                  onClick={resetLottery}
-                  disabled={rolling}
+                  onClick={fetchData}
+                  disabled={rolling || isRefreshing}
+                  style={{ marginRight: "10px" }}
                 >
-                  Refresh Data API
+                  🔄 Refresh Data API
+                </button>
+                <button
+                  className="btn-reset-secondary"
+                  onClick={resetLottery}
+                  disabled={rolling || isRefreshing}
+                >
+                  🗑️ Reset Pemenang
                 </button>
               </div>
             </section>
@@ -620,21 +643,24 @@ const App = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {pastWinners.map((w, idx) => (
-                          <tr key={idx} className={`winner-row-entry ${w.isDisqualified || w.statusText === "GUGUR" ? "is-gugur" : ""}`}>
-                            <td className="col-time">{w.drawTime}</td>
-                            <td className="col-name">{w.nama}</td>
-                            <td className="col-instansi">{w.instansi || "Peserta"}</td>
-                            <td className="col-prize">🎁 {w.prize ? w.prize.toUpperCase() : "-"}</td>
-                            <td className="col-status">
-                              {w.isDisqualified || w.statusText === "GUGUR" ? (
-                                <span className="status-pill fail">❌ GUGUR</span>
-                              ) : (
-                                <span className="status-pill success">✅ SAH</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
+                        {pastWinners.map((w, idx) => {
+                          const isFail = w.isDisqualified || w.statusText === "HANGUS" || w.statusText === "GUGUR";
+                          return (
+                            <tr key={idx} className={`winner-row-entry ${isFail ? "is-gugur" : ""}`}>
+                              <td className="col-time">{w.drawTime}</td>
+                              <td className="col-name">{w.nama}</td>
+                              <td className="col-instansi">{w.instansi || "Peserta"}</td>
+                              <td className="col-prize">🎁 {w.prize && w.prize !== "-" ? w.prize.toUpperCase() : "-"}</td>
+                              <td className="col-status">
+                                {isFail ? (
+                                  <span className="status-pill fail">❌ HANGUS</span>
+                                ) : (
+                                  <span className="status-pill success">✅ SAH</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -739,10 +765,10 @@ const App = () => {
               <img src={sidoarjoImage} alt="Logo Sidoarjo" className="reset-modal-logo" />
             </div>
 
-            <h3 className="reset-modal-title">Sinkronkan Ulang Data API?</h3>
+            <h3 className="reset-modal-title">Reset Seluruh Data Pemenang?</h3>
 
             <p className="reset-modal-desc">
-              Data peserta, hadiah, dan riwayat pemenang akan disinkronkan ulang langsung dari database server local.
+              Semua riwayat pemenang akan dihapus dari database server, kuota hadiah dikembalikan, dan status peserta di-reset ke belum diundi.
             </p>
 
             <div className="reset-modal-actions">
@@ -756,7 +782,7 @@ const App = () => {
                 className="reset-modal-btn confirm"
                 onClick={confirmReset}
               >
-                Ya, Sinkronkan
+                Ya, Reset Sekarang
               </button>
             </div>
           </div>
