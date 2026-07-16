@@ -170,9 +170,11 @@ const App = () => {
       // Seed/update reel items with remaining eligible participants when not actively drawing
       if (!isDrawingRef.current) {
         if (fetchedParticipants.length > 0) {
-          let displayItems = [...fetchedParticipants];
-          while (displayItems.length < 10 && displayItems.length > 0) {
-            displayItems = displayItems.concat(fetchedParticipants);
+          const eligible = fetchedParticipants.filter((p) => !p.status_peserta);
+          const seedPool = eligible.length > 0 ? eligible : fetchedParticipants;
+          let displayItems = [];
+          while (displayItems.length < 10) {
+            displayItems = displayItems.concat(seedPool);
           }
           setReelItems(displayItems.slice(0, 10));
         } else {
@@ -423,18 +425,23 @@ const App = () => {
     const currentBottom = reelItems[activeIndex + 1] || safeEligible[2 % safeEligible.length];
 
     const newReel = Array(80).fill(null);
-    for (let i = 0; i < 9; i++) {
+
+    // Keep top items matching current view to prevent jumpiness on initial spin frame
+    for (let i = 0; i < 4; i++) {
       newReel[i] = reelItems[i] || safeEligible[i % safeEligible.length];
     }
 
     // Winner will be centered at index 70
     newReel[70] = chosenWinner;
 
-    // Fill all other slots (9 to 79) with randomly picked candidates for a dynamic rolling sequence
-    for (let i = 9; i < 80; i++) {
+    // Fill all other slots (4 to 79) with clean continuous linear sequence (zero duplicate names in visible window)
+    const winnerPos = safeEligible.findIndex((p) => p.id === chosenWinner.id);
+    const validWinnerPos = winnerPos >= 0 ? winnerPos : 0;
+    for (let i = 4; i < 80; i++) {
       if (i === 70) continue;
-      const randIdx = Math.floor(Math.random() * safeEligible.length);
-      newReel[i] = safeEligible[randIdx];
+      const offset = 70 - i;
+      const pos = ((validWinnerPos - offset) % safeEligible.length + safeEligible.length * 1000) % safeEligible.length;
+      newReel[i] = safeEligible[pos];
     }
 
     // Set reel items and reset translate position to 0 instantly
