@@ -483,11 +483,11 @@ body {
   white-space: nowrap;
 }
 
-/* Spin Blur */
+/* Spin Blur - Removed blur and opacity reduction for crisp sharp text */
 .slot-machine-reel.is-spinning .slot-item-card {
-  filter: blur(1.2px);
-  opacity: 0.5;
-  transform: scale(0.97);
+  filter: none;
+  opacity: 1;
+  transform: scale(1);
 }
 
 /* Winner Spotlight */

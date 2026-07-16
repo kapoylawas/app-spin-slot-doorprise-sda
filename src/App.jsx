@@ -193,8 +193,10 @@ const App = () => {
       const fetchedResults = (resultsRes.data?.data || []).map((r) => ({
         id: r.participant_id,
         nama: r.participant?.name || "Peserta",
-        instansi: r.participant?.nik ? maskNik(r.participant.nik) : (r.participant?.instansi || "Peserta"),
-        phone: r.participant?.phone || "-",
+        nik: r.participant?.nik ? String(r.participant.nik) : "-",
+        maskedNik: r.participant?.nik ? maskNik(r.participant.nik) : (r.participant?.instansi || r.participant?.kab_name || "Peserta"),
+        instansi: r.participant?.instansi || r.participant?.kab_name || "Peserta",
+        phone: r.participant?.phone || r.participant?.telp || "-",
         prize: r.prize?.name || "-",
         drawTime: new Date(r.submitted_at || r.created_at).toLocaleTimeString("id-ID", {
           hour: "2-digit",
@@ -343,7 +345,7 @@ const App = () => {
   const playSpinTicker = () => {
     let delay = 40;
     const maxDelay = 550;
-    const duration = 7900;
+    const duration = 9900;
     const startTime = Date.now();
 
     const tick = () => {
@@ -428,14 +430,11 @@ const App = () => {
     // Winner will be centered at index 70
     newReel[70] = chosenWinner;
 
-    // Fill other spots with alternating sequence of all eligible candidates (A, B, A, B...)
-    const winnerPos = safeEligible.findIndex((p) => p.id === chosenWinner.id);
-    const validWinnerPos = winnerPos >= 0 ? winnerPos : 0;
+    // Fill all other slots (9 to 79) with randomly picked candidates for a dynamic rolling sequence
     for (let i = 9; i < 80; i++) {
       if (i === 70) continue;
-      const offset = 70 - i;
-      const pos = ((validWinnerPos - offset) % safeEligible.length + safeEligible.length * 100) % safeEligible.length;
-      newReel[i] = safeEligible[pos];
+      const randIdx = Math.floor(Math.random() * safeEligible.length);
+      newReel[i] = safeEligible[randIdx];
     }
 
     // Set reel items and reset translate position to 0 instantly
@@ -447,13 +446,13 @@ const App = () => {
     // Play tick sound pattern
     playSpinTicker();
 
-    // Trigger the CSS transition slide (8 seconds duration)
+    // Trigger the CSS transition slide (10 seconds duration)
     setTimeout(() => {
       setTranslateY(3432);
-      setTransitionStyle("transform 8s cubic-bezier(0.12, 0.88, 0.3, 1)");
+      setTransitionStyle("transform 10s cubic-bezier(0.12, 0.88, 0.3, 1)");
     }, 50);
 
-    // When the animation completes (8050ms)
+    // When the animation completes (10050ms)
     setTimeout(async () => {
       setRolling(false);
       setWinner(true);
@@ -473,7 +472,7 @@ const App = () => {
 
       // Release the draw lock
       isDrawingRef.current = false;
-    }, 8050);
+    }, 10050);
   };
 
   const closeWinnerModal = async () => {
@@ -616,14 +615,25 @@ const App = () => {
                     🎁 HADIAH: {pastWinners[0].prize ? pastWinners[0].prize.toUpperCase() : "-"}
                   </div>
                   <div className="mc-spotlight-name">{pastWinners[0].nama}</div>
-                  <div className="mc-spotlight-instansi">
-                    🏛️ {pastWinners[0].instansi || "Peserta"}
+                  <div className="mc-spotlight-instansi" style={{ color: "var(--color-orange)", fontWeight: "800", fontSize: "1.1rem" }}>
+                    🆔 NIK: {pastWinners[0].nik !== "-" ? pastWinners[0].nik : "---"}
+                  </div>
+                  <div className="mc-spotlight-instansi" style={{ fontSize: "1.05rem", marginTop: "4px" }}>
+                    🏛️ Kota / Kabupaten: {pastWinners[0].instansi || pastWinners[0].kab_name || "Peserta"}
                   </div>
                 </div>
                 <div className="mc-spotlight-meta-list">
                   <div className="mc-meta-item">
-                    <span className="mc-meta-label">📞 Nomor Telepon</span>
-                    <span className="mc-meta-val">{pastWinners[0].phone || "---"}</span>
+                    <span className="mc-meta-label">📞 No. Telepon (Lengkap)</span>
+                    <span className="mc-meta-val" style={{ color: "var(--color-yellow)", fontSize: "1.1rem", fontWeight: "900" }}>
+                      {pastWinners[0].phone || "---"}
+                    </span>
+                  </div>
+                  <div className="mc-meta-item">
+                    <span className="mc-meta-label">🆔 NIK Lengkap</span>
+                    <span className="mc-meta-val" style={{ color: "var(--color-orange)", fontSize: "1.1rem", fontWeight: "900" }}>
+                      {pastWinners[0].nik !== "-" ? pastWinners[0].nik : "---"}
+                    </span>
                   </div>
                   <div className="mc-meta-item">
                     <span className="mc-meta-label">⏱️ Waktu Undian</span>
@@ -649,7 +659,7 @@ const App = () => {
             <div className="mc-search-box">
               <input
                 type="text"
-                placeholder="🔍 Cari nama pemenang, NIK/instansi, atau telepon..."
+                placeholder="🔍 Cari nama pemenang, NIK, Kota/Kabupaten, atau telepon..."
                 value={mcSearchQuery}
                 onChange={(e) => setMcSearchQuery(e.target.value)}
                 className="mc-input-field"
@@ -692,8 +702,9 @@ const App = () => {
                       <th>No</th>
                       <th>Waktu</th>
                       <th>Nama Pemenang</th>
-                      <th>Instansi / NIK</th>
-                      <th>No. Telepon</th>
+                      <th>NIK (Lengkap)</th>
+                      <th>Kota / Kabupaten</th>
+                      <th>No. Telepon (Lengkap)</th>
                       <th>Hadiah</th>
                       <th>Status</th>
                     </tr>
@@ -708,11 +719,16 @@ const App = () => {
                         >
                           <td>{filteredMcWinners.length - idx}</td>
                           <td>{w.drawTime}</td>
-                          <td style={{ color: "#1a1a1a", fontSize: "1.05rem" }}>
+                          <td style={{ color: "#1a1a1a", fontSize: "1.05rem", fontWeight: "800" }}>
                             {w.nama} {isLatest && <span style={{ fontSize: "0.8rem", color: "var(--color-orange)", marginLeft: "6px" }}>(Terbaru)</span>}
                           </td>
+                          <td style={{ fontWeight: "800", letterSpacing: "0.5px", color: "var(--text-dark)" }}>
+                            {w.nik !== "-" ? w.nik : "-"}
+                          </td>
                           <td>{w.instansi || "Peserta"}</td>
-                          <td>{w.phone || "-"}</td>
+                          <td style={{ fontWeight: "800", color: "#1a1a1a" }}>
+                            {w.phone || "-"}
+                          </td>
                           <td>🎁 {w.prize ? w.prize.toUpperCase() : "-"}</td>
                           <td>
                             {w.isDisqualified || w.statusText === "HANGUS" ? (
@@ -854,14 +870,14 @@ const App = () => {
                       {rolling
                         ? "MENGACAK NAMA..."
                         : isRefreshing
-                        ? "SINKRONISASI DATA..."
-                        : eligibleCount === 0
-                        ? "SEMUA PESERTA SUDAH DIUNDI"
-                        : !selectedPrizeId
-                        ? "PILIH HADIAH TERLEBIH DAHULU"
-                        : isPrizeQuotaExhausted
-                        ? "KUOTA HADIAH HABIS"
-                        : "ACAK PEMENANG"}
+                          ? "SINKRONISASI DATA..."
+                          : eligibleCount === 0
+                            ? "SEMUA PESERTA SUDAH DIUNDI"
+                            : !selectedPrizeId
+                              ? "PILIH HADIAH TERLEBIH DAHULU"
+                              : isPrizeQuotaExhausted
+                                ? "KUOTA HADIAH HABIS"
+                                : "ACAK PEMENANG"}
                     </span>
                     <span className="btn-glow"></span>
                   </button>
@@ -901,7 +917,7 @@ const App = () => {
                           <tr>
                             <th>Waktu</th>
                             <th>Nama Pemenang</th>
-                            <th>Peserta</th>
+                            <th>Kota / Kabupaten</th>
                             <th>Hadiah</th>
                             <th>Status</th>
                           </tr>
