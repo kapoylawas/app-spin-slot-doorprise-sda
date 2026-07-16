@@ -161,7 +161,7 @@ const App = () => {
         ...p,
         nama: p.name,
         telp: p.phone,
-        instansi: p.nik ? `NIK: ${p.nik}` : "Peserta",
+        instansi: p.nik ? maskNik(p.nik) : (p.instansi || "Peserta"),
       }));
       setNames(fetchedParticipants);
 
@@ -181,7 +181,7 @@ const App = () => {
       const fetchedResults = (resultsRes.data?.data || []).map((r) => ({
         id: r.participant_id,
         nama: r.participant?.name || "Peserta",
-        instansi: r.participant?.nik ? `NIK: ${r.participant.nik}` : "Peserta",
+        instansi: r.participant?.nik ? maskNik(r.participant.nik) : (r.participant?.instansi || "Peserta"),
         prize: r.prize?.name || "-",
         drawTime: new Date(r.submitted_at || r.created_at).toLocaleTimeString("id-ID", {
           hour: "2-digit",
@@ -278,6 +278,16 @@ const App = () => {
     const firstPart = phone.substring(0, 5);
     const lastPart = phone.substring(phone.length - 4);
     return `${firstPart}***${lastPart}`;
+  };
+
+  // Helper to mask NIK (keep first 4 digits, replace the rest with 'x')
+  const maskNik = (nik) => {
+    if (!nik) return "Peserta";
+    const cleanNik = String(nik).trim();
+    if (cleanNik.length <= 4) return `NIK: ${cleanNik}`;
+    const firstFour = cleanNik.substring(0, 4);
+    const maskedPart = "x".repeat(cleanNik.length - 4);
+    return `NIK: ${firstFour}${maskedPart}`;
   };
 
   // Sound ticker engine
