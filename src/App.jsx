@@ -4,8 +4,8 @@ import sidoarjoImage from "../public/sidoarjo.png";
 import axios from "axios";
 
 // Server API Configuration
-// const API_BASE_URL = "http://10.1.18.99/api";
-const API_BASE_URL = "http://localhost:8000/api";
+const API_BASE_URL = "http://10.1.18.99/api";
+// const API_BASE_URL = "http://localhost:8000/api";
 const API_TOKEN = "2|ydUqZdX4zdz68SIW6uPFAauTJUPTXfZhp3BjOEbne110bd43";
 
 const getApiHeaders = () => ({
