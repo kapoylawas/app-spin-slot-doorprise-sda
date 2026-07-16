@@ -413,49 +413,53 @@ const App = () => {
       randomValue = Math.random();
     }
 
+    // 1. Pick winner randomly using crypto-grade randomness across ALL eligible candidates (1 to 2000)
     const targetIdx = Math.floor(randomValue * safeEligible.length);
     const chosenWinner = safeEligible[targetIdx];
 
     // Immediately remove chosen winner from local candidate list state to prevent re-selection
     setNames((prevNames) => prevNames.filter((p) => p.id !== chosenWinner.id));
 
-    // Seed index 0, 1, 2 with currently visible items to prevent jumpiness
-    const currentTop = reelItems[activeIndex - 1] || safeEligible[0];
-    const currentMiddle = reelItems[activeIndex] || safeEligible[1 % safeEligible.length];
-    const currentBottom = reelItems[activeIndex + 1] || safeEligible[2 % safeEligible.length];
+    // 2. Create a fully shuffled pool of ALL 2000 participants (Fisher-Yates Shuffle)
+    // so registration numbers from early, middle, and late batches are completely mixed up on the wheel
+    const shuffledPool = [...safeEligible];
+    for (let j = shuffledPool.length - 1; j > 0; j--) {
+      const k = Math.floor(Math.random() * (j + 1));
+      [shuffledPool[j], shuffledPool[k]] = [shuffledPool[k], shuffledPool[j]];
+    }
 
-    const newReel = Array(80).fill(null);
+    const newReel = Array(160).fill(null);
 
     // Keep top items matching current view to prevent jumpiness on initial spin frame
     for (let i = 0; i < 4; i++) {
-      newReel[i] = reelItems[i] || safeEligible[i % safeEligible.length];
+      newReel[i] = reelItems[i] || shuffledPool[i % shuffledPool.length];
     }
 
-    // Winner will be centered at index 70
-    newReel[70] = chosenWinner;
+    // Winner will be centered at index 140
+    newReel[140] = chosenWinner;
 
-    // Fill all other slots (4 to 79) with clean continuous linear sequence (zero duplicate names in visible window)
-    const winnerPos = safeEligible.findIndex((p) => p.id === chosenWinner.id);
+    // Fill all other slots (4 to 159) sequentially from shuffled pool (zero duplicate names in 10-item window)
+    const winnerPos = shuffledPool.findIndex((p) => p.id === chosenWinner.id);
     const validWinnerPos = winnerPos >= 0 ? winnerPos : 0;
-    for (let i = 4; i < 80; i++) {
-      if (i === 70) continue;
-      const offset = 70 - i;
-      const pos = ((validWinnerPos - offset) % safeEligible.length + safeEligible.length * 1000) % safeEligible.length;
-      newReel[i] = safeEligible[pos];
+    for (let i = 4; i < 160; i++) {
+      if (i === 140) continue;
+      const offset = 140 - i;
+      const pos = ((validWinnerPos - offset) % shuffledPool.length + shuffledPool.length * 1000) % shuffledPool.length;
+      newReel[i] = shuffledPool[pos];
     }
 
     // Set reel items and reset translate position to 0 instantly
     setReelItems(newReel);
-    setActiveIndex(70);
+    setActiveIndex(140);
     setTranslateY(0);
     setTransitionStyle("none");
 
     // Play tick sound pattern
     playSpinTicker();
 
-    // Trigger the CSS transition slide (10 seconds duration)
+    // Trigger the CSS transition slide (10 seconds duration across 140 slots)
     setTimeout(() => {
-      setTranslateY(3432);
+      setTranslateY(7280);
       setTransitionStyle("transform 10s cubic-bezier(0.12, 0.88, 0.3, 1)");
     }, 50);
 
