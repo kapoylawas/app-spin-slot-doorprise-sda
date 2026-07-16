@@ -131,6 +131,7 @@ const App = () => {
   const [winner, setWinner] = useState(false);
   const [winnerData, setWinnerData] = useState(null);
   const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("⚠️ Silakan pilih hadiah terlebih dahulu sebelum mengacak!");
   const [showResetModal, setShowResetModal] = useState(false);
 
   // Timer states for caller countdown (10s)
@@ -193,6 +194,7 @@ const App = () => {
         id: r.participant_id,
         nama: r.participant?.name || "Peserta",
         instansi: r.participant?.nik ? maskNik(r.participant.nik) : (r.participant?.instansi || "Peserta"),
+        phone: r.participant?.phone || "-",
         prize: r.prize?.name || "-",
         drawTime: new Date(r.submitted_at || r.created_at).toLocaleTimeString("id-ID", {
           hour: "2-digit",
@@ -238,6 +240,42 @@ const App = () => {
       return false;
     }
   };
+
+  // View navigation state ('spin' or 'mc')
+  const [viewMode, setViewMode] = useState(() => {
+    if (window.location.hash === "#mc" || window.location.search.includes("mode=mc")) {
+      return "mc";
+    }
+    return "spin";
+  });
+  const [mcSearchQuery, setMcSearchQuery] = useState("");
+
+  // Listen to hash change for direct URL routing (#mc / #spin)
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (window.location.hash === "#mc" || window.location.search.includes("mode=mc")) {
+        setViewMode("mc");
+      } else if (window.location.hash === "#spin") {
+        setViewMode("spin");
+      }
+    };
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
+
+  // Auto-polling for MC view to get realtime updates when spin occurs
+  useEffect(() => {
+    let interval;
+    if (viewMode === "mc") {
+      fetchData();
+      interval = setInterval(() => {
+        fetchData();
+      }, 2500);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [viewMode]);
 
   // Fetch initial data on load
   useEffect(() => {
@@ -324,8 +362,17 @@ const App = () => {
   };
 
   const startDraw = () => {
-    // GUARD 1: Prize must be selected
-    if (!selectedPrizeId && !prize) {
+    // GUARD 1: Prize must be selected and have remaining quota > 0
+    const selectedPrizeObj = prizesList.find((p) => String(p.id) === String(selectedPrizeId));
+    if (!selectedPrizeId || !selectedPrizeObj) {
+      setToastMessage("⚠️ Silakan pilih hadiah terlebih dahulu sebelum mengacak!");
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 5000);
+      return;
+    }
+
+    if (selectedPrizeObj.remaining_quota <= 0) {
+      setToastMessage(`⚠️ Kuota hadiah "${selectedPrizeObj.name}" sudah habis! Silakan pilih hadiah lain.`);
       setShowToast(true);
       setTimeout(() => setShowToast(false), 5000);
       return;
@@ -426,7 +473,7 @@ const App = () => {
 
       // Release the draw lock
       isDrawingRef.current = false;
-    }, 4550);
+    }, 8050);
   };
 
   const closeWinnerModal = async () => {
@@ -490,287 +537,490 @@ const App = () => {
   };
 
   const eligibleCount = names.filter((peserta) => !peserta.status_peserta).length;
+  const selectedPrizeObj = prizesList.find((p) => String(p.id) === String(selectedPrizeId));
+  const isPrizeQuotaExhausted = !selectedPrizeObj || (selectedPrizeObj.remaining_quota !== undefined && selectedPrizeObj.remaining_quota <= 0);
+
+  // Filtered winners for MC search box
+  const filteredMcWinners = pastWinners.filter((w) => {
+    if (!mcSearchQuery) return true;
+    const q = mcSearchQuery.toLowerCase();
+    return (
+      (w.nama && w.nama.toLowerCase().includes(q)) ||
+      (w.instansi && w.instansi.toLowerCase().includes(q)) ||
+      (w.prize && w.prize.toLowerCase().includes(q)) ||
+      (w.phone && w.phone.toLowerCase().includes(q))
+    );
+  });
 
   return (
     <div className="lucky-draw-root">
 
+      {/* Top Header Navigation Bar with View Switcher */}
+      <nav className="top-nav-tabs">
+        <div className="top-nav-brand">
+          <img src={sidoarjoImage} alt="Logo Sidoarjo" />
+          <span>SIDOARJO LUCKY DRAW</span>
+        </div>
+
+        <div className="view-switcher">
+          <button
+            className={`view-tab-btn ${viewMode === "spin" ? "active" : ""}`}
+            onClick={() => {
+              setViewMode("spin");
+              window.location.hash = "spin";
+            }}
+          >
+            📺 Tampilan Videotron
+          </button>
+          <button
+            className={`view-tab-btn ${viewMode === "mc" ? "active" : ""}`}
+            onClick={() => {
+              setViewMode("mc");
+              window.location.hash = "mc";
+            }}
+          >
+            🎤 Mode MC / Presenter
+          </button>
+        </div>
+
+        <div className="live-indicator">
+          <span className="pulse-dot"></span>
+          <span>{viewMode === "mc" ? "LIVE AUTO-SYNC API (2.5s)" : "ONLINE API"}</span>
+        </div>
+      </nav>
+
       {/* Toast Alert */}
       {showToast && (
         <div className="toast-top-center animate-slide-down">
-          ⚠️ Silakan pilih hadiah terlebih dahulu sebelum mengacak!
+          {toastMessage}
         </div>
       )}
 
       {/* Confetti Celebration */}
-      {winner && <Confetti />}
+      {winner && viewMode === "spin" && <Confetti />}
 
-      <div className="lucky-draw-container wide-layout">
-        {/* Header */}
-        <header className="lucky-draw-header">
-          <div className="logo-wrapper">
-            <img src={sidoarjoImage} alt="Logo Sidoarjo" className="sidoarjo-logo" />
-          </div>
-          <h1 className="main-title">SIDOARJO LUCKY DRAW</h1>
-          <p className="subtitle">Sistem Pengundian Doorprize Digital Terpadu</p>
-        </header>
-
-        {/* Stats Row */}
-        <section className="stats-dashboard single-card">
-          <div className="stat-card gold">
-            <span className="stat-label">🎁 Hadiah Terpilih</span>
-            <span className="stat-value">{prize ? prize.toUpperCase() : "BELUM DIPILIH"}</span>
-          </div>
-        </section>
-
-        {/* 2-Column Side-by-Side Dashboard Layout for Videotron */}
-        <div className="videotron-grid-layout">
-          {/* Left Column: Controls & Slot Wheel */}
-          <div className="videotron-col-left">
-            {/* Prize Selector */}
-            <section className="prize-selection-panel">
-              <div className="panel-card">
-                <div className="card-header-icon">🎁</div>
-                <h3 className="panel-title">Langkah 1: Pilih Hadiah Menarik</h3>
-                <div className="select-dropdown-wrapper">
-                  <select
-                    value={selectedPrizeId}
-                    onChange={(e) => {
-                      const selectedId = e.target.value;
-                      setSelectedPrizeId(selectedId);
-                      const selectedObj = prizesList.find((p) => String(p.id) === String(selectedId));
-                      if (selectedObj) {
-                        setPrize(selectedObj.name);
-                      }
-                    }}
-                    className="custom-dropdown"
-                    disabled={rolling || prizesList.length === 0}
-                  >
-                    <option value="" disabled hidden>
-                      {prizesList.length > 0 ? "-- Silakan Pilih Hadiah --" : "-- Hadiah Tidak Tersedia / Kuota Habis --"}
-                    </option>
-                    {prizesList.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        🎁 {p.name.toUpperCase()} (Sisa Quota: {p.remaining_quota})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+      {/* ============================================================
+         VIEW MODE: MC / PRESENTER DASHBOARD
+         ============================================================ */}
+      {viewMode === "mc" ? (
+        <div className="mc-container animate-fade-in">
+          {/* Spotlight Banner: Latest Winner */}
+          {pastWinners.length > 0 && (
+            <div className="mc-spotlight-card">
+              <div className="mc-spotlight-badge">
+                <span>🏆 PEMENANG TERBARU (SIAP DIUMUMKAN MC)</span>
               </div>
-            </section>
-
-            {/* Slot Machine Area */}
-            <section className="slot-machine-panel">
-              <h3 className="panel-title text-center mb-3">Langkah 2: Putar Roda Keberuntungan</h3>
-
-              <div className="slot-machine-console">
-                <div className={`console-neon-bar left ${rolling ? "rolling" : ""}`}></div>
-                <div className={`console-neon-bar right ${rolling ? "rolling" : ""}`}></div>
-
-                <div className="slot-machine-viewport">
-                  {/* Highlight selection box */}
-                  <div className="slot-machine-highlight-box">
-                    <div className="arrow left">▶</div>
-                    <div className="arrow right">◀</div>
+              <div className="mc-spotlight-grid">
+                <div className="mc-spotlight-name-box">
+                  <div className="mc-spotlight-prize">
+                    🎁 HADIAH: {pastWinners[0].prize ? pastWinners[0].prize.toUpperCase() : "-"}
                   </div>
-
-                  {/* Scrollable Reel */}
-                  <div
-                    className={`slot-machine-reel ${rolling ? "is-spinning" : ""}`}
-                    style={{
-                      transform: `translateY(-${translateY}px)`,
-                      transition: transitionStyle,
-                    }}
-                  >
-                    {reelItems.map((item, idx) => (
-                      <div
-                        key={idx}
-                        className={`slot-machine-item ${idx === activeIndex && winner ? "is-winner" : ""
-                          }`}
-                      >
-                        {item ? (
-                          <div className="slot-item-card">
-                            <div className="slot-item-name">{item.nama}</div>
-                            <div className="slot-item-instansi">
-                              {item.instansi || "Peserta"}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="slot-item-card placeholder">
-                            <div className="slot-item-name">---</div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                  <div className="mc-spotlight-name">{pastWinners[0].nama}</div>
+                  <div className="mc-spotlight-instansi">
+                    🏛️ {pastWinners[0].instansi || "Peserta"}
                   </div>
                 </div>
-              </div>
-
-              <div className="console-controls">
-                <button
-                  className="btn-draw-main"
-                  onClick={startDraw}
-                  disabled={rolling || eligibleCount === 0 || isRefreshing}
-                >
-                  <span className="btn-text">
-                    {rolling ? "MENGACAK NAMA..." : isRefreshing ? "SINKRONISASI DATA..." : "ACAK PEMENANG"}
-                  </span>
-                  <span className="btn-glow"></span>
-                </button>
-
-                <button
-                  className="btn-reset-secondary"
-                  onClick={fetchData}
-                  disabled={rolling || isRefreshing}
-                  style={{ marginRight: "10px" }}
-                >
-                  🔄 Refresh Data API
-                </button>
-                <button
-                  className="btn-reset-secondary"
-                  onClick={resetLottery}
-                  disabled={rolling || isRefreshing}
-                >
-                  🗑️ Reset Pemenang
-                </button>
-              </div>
-            </section>
-          </div>
-
-          {/* Right Column: Real-Time Past Winners Log */}
-          <div className="videotron-col-right">
-            <section className="past-winners-log animate-fade-in full-height">
-              <div className="log-panel-card">
-                <div className="log-header">
-                  <span className="log-icon">📜</span>
-                  <h3 className="log-title">Daftar Pemenang Terkini</h3>
-                </div>
-
-                {pastWinners.length > 0 ? (
-                  <div className="log-table-container">
-                    <table className="log-table">
-                      <thead>
-                        <tr>
-                          <th>Waktu</th>
-                          <th>Nama Pemenang</th>
-                          <th>Peserta</th>
-                          <th>Hadiah</th>
-                          <th>Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pastWinners.map((w, idx) => {
-                          const isFail = w.isDisqualified || w.statusText === "HANGUS" || w.statusText === "GUGUR";
-                          return (
-                            <tr key={idx} className={`winner-row-entry ${isFail ? "is-gugur" : ""}`}>
-                              <td className="col-time">{w.drawTime}</td>
-                              <td className="col-name">{w.nama}</td>
-                              <td className="col-instansi">{w.instansi || "Peserta"}</td>
-                              <td className="col-prize">🎁 {w.prize && w.prize !== "-" ? w.prize.toUpperCase() : "-"}</td>
-                              <td className="col-status">
-                                {isFail ? (
-                                  <span className="status-pill fail">❌ HANGUS</span>
-                                ) : (
-                                  <span className="status-pill success">✅ SAH</span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                <div className="mc-spotlight-meta-list">
+                  <div className="mc-meta-item">
+                    <span className="mc-meta-label">📞 Nomor Telepon</span>
+                    <span className="mc-meta-val">{pastWinners[0].phone || "---"}</span>
                   </div>
-                ) : (
-                  <div className="empty-winners-placeholder">
-                    <div className="empty-icon">🏆</div>
-                    <p className="empty-text">Belum ada pemenang yang terundi.</p>
-                    <p className="empty-subtext">Pilih hadiah dan klik "ACAK PEMENANG" untuk memulai.</p>
+                  <div className="mc-meta-item">
+                    <span className="mc-meta-label">⏱️ Waktu Undian</span>
+                    <span className="mc-meta-val">{pastWinners[0].drawTime} WIB</span>
                   </div>
-                )}
-              </div>
-            </section>
-          </div>
-        </div>
-
-        {/* Winner Showcase Modal/Card */}
-        {winner && winnerData && (
-          <section className="winner-announcement-overlay">
-            <div className={`winner-announcement-card animate-zoom-in ${isDisqualified ? "disqualified" : ""}`}>
-              <div className="celebration-ribbon">
-                {isDisqualified ? "❌ PEMENANG GUGUR ❌" : "🏆 PEMENANG UTAMA 🏆"}
-              </div>
-
-              <div className="card-trophy">{isDisqualified ? "❌" : "🎉"}</div>
-
-              <div className="winner-details">
-                <p className="prize-won-tag">MEMENANGKAN {prize.toUpperCase()}</p>
-
-                <h2 className="winner-name-glow">{winnerData.nama}</h2>
-                <h4 className="winner-instansi-detail">{winnerData.instansi || "Peserta"}</h4>
-
-                <div className="winner-metadata-box">
-                  <div className="meta-row">
-                    <span className="meta-label">Nomor Telepon</span>
-                    <span className="meta-val">
-                      {maskPhoneNumber(winnerData.telp)}
-                    </span>
-                  </div>
-                  <div className="meta-row">
-                    <span className="meta-label">Waktu Undian</span>
-                    <span className="meta-val">
-                      {new Date().toLocaleTimeString("id-ID", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })} WIB
+                  <div className="mc-meta-item">
+                    <span className="mc-meta-label">Status Verifikasi</span>
+                    <span className="mc-meta-val">
+                      {pastWinners[0].isDisqualified || pastWinners[0].statusText === "HANGUS" ? (
+                        <span style={{ color: "var(--color-red)", fontWeight: "900" }}>❌ HANGUS</span>
+                      ) : (
+                        <span style={{ color: "var(--color-green)", fontWeight: "900" }}>✅ SAH</span>
+                      )}
                     </span>
                   </div>
                 </div>
               </div>
+            </div>
+          )}
 
-              {/* Countdown Timer Calling Box */}
-              <div className="timer-caller-box">
-                <div className="timer-display-header">⏱️ Hitung Mundur Panggilan (10 Detik)</div>
-                <div className={`timer-number ${countdown <= 3 && countdown > 0 ? "urgent" : ""} ${isDisqualified ? "expired" : ""}`}>
-                  {countdown} <span className="timer-unit">Detik</span>
-                </div>
+          {/* Controls & Toolbar */}
+          <div className="mc-toolbar-card">
+            <div className="mc-search-box">
+              <input
+                type="text"
+                placeholder="🔍 Cari nama pemenang, NIK/instansi, atau telepon..."
+                value={mcSearchQuery}
+                onChange={(e) => setMcSearchQuery(e.target.value)}
+                className="mc-input-field"
+              />
+            </div>
 
-                {isDisqualified && (
-                  <div className="timer-status-badge fail">
-                    ⚠️ Waktu habis! Peserta dianggap GUGUR / Tidak Ada di Tempat.
-                  </div>
-                )}
-
-                <div className="timer-controls">
-                  {!isTimerRunning && countdown > 0 && (
-                    <button className="btn-timer start" onClick={startTimer}>
-                      ▶️ Mulai Hitung (10s)
-                    </button>
-                  )}
-                  {isTimerRunning && (
-                    <button className="btn-timer stop" onClick={stopTimer}>
-                      ⏸️ Hentikan Counter (Hadir)
-                    </button>
-                  )}
-                  {(isDisqualified || countdown < 10) && (
-                    <button className="btn-timer reset" onClick={resetTimer}>
-                      🔄 Reset Timer (10s)
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <p className="card-footer-note">
-                {isDisqualified
-                  ? "Status peserta telah tercatat. Tutup modal untuk melakukan pengundian ulang."
-                  : "Selamat! Hubungi Panitia / Dinas Kominfo Sidoarjo untuk penyerahan hadiah."}
-              </p>
-
-              <button className="btn-close-winner" onClick={closeWinnerModal}>
-                {isDisqualified ? "Tutup & Diundi Lagi" : "Tutup"}
+            <div className="mc-action-btns">
+              <button
+                className="btn-mc-action primary"
+                onClick={fetchData}
+                disabled={isRefreshing}
+              >
+                {isRefreshing ? "⏳ Syncing..." : "🔄 Refresh Manual"}
+              </button>
+              <button
+                className="btn-mc-action print"
+                onClick={() => window.print()}
+              >
+                🖨️ Cetak / Print List
               </button>
             </div>
+          </div>
+
+          {/* Winner List Table Panel */}
+          <div className="mc-table-panel">
+            <div className="mc-table-header-row">
+              <div className="mc-table-title">
+                📜 List Pemenang Doorprize Terkini ({filteredMcWinners.length} Orang)
+              </div>
+              <div style={{ fontSize: "0.85rem", color: "#666", fontWeight: "700" }}>
+                Auto-Sync API Setiap 2.5 Detik
+              </div>
+            </div>
+
+            {filteredMcWinners.length > 0 ? (
+              <div className="mc-table-wrapper">
+                <table className="mc-table">
+                  <thead>
+                    <tr>
+                      <th>No</th>
+                      <th>Waktu</th>
+                      <th>Nama Pemenang</th>
+                      <th>Instansi / NIK</th>
+                      <th>No. Telepon</th>
+                      <th>Hadiah</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredMcWinners.map((w, idx) => {
+                      const isLatest = idx === 0 && !mcSearchQuery;
+                      return (
+                        <tr
+                          key={idx}
+                          className={isLatest ? "latest-winner-row" : ""}
+                        >
+                          <td>{filteredMcWinners.length - idx}</td>
+                          <td>{w.drawTime}</td>
+                          <td style={{ color: "#1a1a1a", fontSize: "1.05rem" }}>
+                            {w.nama} {isLatest && <span style={{ fontSize: "0.8rem", color: "var(--color-orange)", marginLeft: "6px" }}>(Terbaru)</span>}
+                          </td>
+                          <td>{w.instansi || "Peserta"}</td>
+                          <td>{w.phone || "-"}</td>
+                          <td>🎁 {w.prize ? w.prize.toUpperCase() : "-"}</td>
+                          <td>
+                            {w.isDisqualified || w.statusText === "HANGUS" ? (
+                              <span className="status-pill fail">❌ HANGUS</span>
+                            ) : (
+                              <span className="status-pill success">✅ SAH</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty-winners-placeholder">
+                <div className="empty-icon">📜</div>
+                <p className="empty-text">Belum ada pemenang yang terdaftar</p>
+                <p className="empty-subtext">Halaman ini terhubung langsung secara real-time dengan pengundian videotron.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* ============================================================
+           VIEW MODE: MAIN VIDEOTRON SPIN SLOT
+           ============================================================ */
+        <div className="lucky-draw-container wide-layout">
+          {/* Header */}
+          <header className="lucky-draw-header">
+            <div className="logo-wrapper">
+              <img src={sidoarjoImage} alt="Logo Sidoarjo" className="sidoarjo-logo" />
+            </div>
+            <h1 className="main-title">SIDOARJO LUCKY DRAW</h1>
+            <p className="subtitle">Sistem Pengundian Doorprize Digital Terpadu</p>
+          </header>
+
+          {/* Stats Row */}
+          <section className="stats-dashboard single-card">
+            <div className="stat-card gold">
+              <span className="stat-label">🎁 Hadiah Terpilih</span>
+              <span className="stat-value">{prize ? prize.toUpperCase() : "BELUM DIPILIH"}</span>
+            </div>
           </section>
-        )}
-      </div>
+
+          {/* 2-Column Side-by-Side Dashboard Layout for Videotron */}
+          <div className="videotron-grid-layout">
+            {/* Left Column: Controls & Slot Wheel */}
+            <div className="videotron-col-left">
+              {/* Prize Selector */}
+              <section className="prize-selection-panel">
+                <div className="panel-card">
+                  <div className="card-header-icon">🎁</div>
+                  <h3 className="panel-title">Langkah 1: Pilih Hadiah Menarik</h3>
+                  <div className="select-dropdown-wrapper">
+                    <select
+                      value={selectedPrizeId}
+                      onChange={(e) => {
+                        const selectedId = e.target.value;
+                        setSelectedPrizeId(selectedId);
+                        const selectedObj = prizesList.find((p) => String(p.id) === String(selectedId));
+                        if (selectedObj) {
+                          setPrize(selectedObj.name);
+                        }
+                      }}
+                      className="custom-dropdown"
+                      disabled={rolling || prizesList.length === 0}
+                    >
+                      <option value="" disabled hidden>
+                        {prizesList.length > 0 ? "-- Silakan Pilih Hadiah --" : "-- Hadiah Tidak Tersedia / Kuota Habis --"}
+                      </option>
+                      {prizesList.map((p) => {
+                        const isZero = p.remaining_quota <= 0;
+                        return (
+                          <option key={p.id} value={p.id} disabled={isZero}>
+                            🎁 {p.name.toUpperCase()} (Sisa Quota: {p.remaining_quota}){isZero ? " - HABIS" : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                </div>
+              </section>
+
+              {/* Slot Machine Area */}
+              <section className="slot-machine-panel">
+                <h3 className="panel-title text-center mb-3">Langkah 2: Putar Roda Keberuntungan</h3>
+
+                <div className="slot-machine-console">
+                  <div className={`console-neon-bar left ${rolling ? "rolling" : ""}`}></div>
+                  <div className={`console-neon-bar right ${rolling ? "rolling" : ""}`}></div>
+
+                  <div className="slot-machine-viewport">
+                    {/* Highlight selection box */}
+                    <div className="slot-machine-highlight-box">
+                      <div className="arrow left">▶</div>
+                      <div className="arrow right">◀</div>
+                    </div>
+
+                    {/* Scrollable Reel */}
+                    <div
+                      className={`slot-machine-reel ${rolling ? "is-spinning" : ""}`}
+                      style={{
+                        transform: `translateY(-${translateY}px)`,
+                        transition: transitionStyle,
+                      }}
+                    >
+                      {reelItems.map((item, idx) => (
+                        <div
+                          key={idx}
+                          className={`slot-machine-item ${idx === activeIndex && winner ? "is-winner" : ""
+                            }`}
+                        >
+                          {item ? (
+                            <div className="slot-item-card">
+                              <div className="slot-item-name">{item.nama}</div>
+                              <div className="slot-item-instansi">
+                                {item.instansi || "Peserta"}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="slot-item-card placeholder">
+                              <div className="slot-item-name">---</div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="console-controls">
+                  <button
+                    className="btn-draw-main"
+                    onClick={startDraw}
+                    disabled={rolling || eligibleCount === 0 || isRefreshing || isPrizeQuotaExhausted}
+                  >
+                    <span className="btn-text">
+                      {rolling
+                        ? "MENGACAK NAMA..."
+                        : isRefreshing
+                        ? "SINKRONISASI DATA..."
+                        : eligibleCount === 0
+                        ? "SEMUA PESERTA SUDAH DIUNDI"
+                        : !selectedPrizeId
+                        ? "PILIH HADIAH TERLEBIH DAHULU"
+                        : isPrizeQuotaExhausted
+                        ? "KUOTA HADIAH HABIS"
+                        : "ACAK PEMENANG"}
+                    </span>
+                    <span className="btn-glow"></span>
+                  </button>
+
+                  <button
+                    className="btn-reset-secondary"
+                    onClick={fetchData}
+                    disabled={rolling || isRefreshing}
+                    style={{ marginRight: "10px" }}
+                  >
+                    🔄 Refresh Data API
+                  </button>
+                  <button
+                    className="btn-reset-secondary"
+                    onClick={resetLottery}
+                    disabled={rolling || isRefreshing}
+                  >
+                    🗑️ Reset Pemenang
+                  </button>
+                </div>
+              </section>
+            </div>
+
+            {/* Right Column: Real-Time Past Winners Log */}
+            <div className="videotron-col-right">
+              <section className="past-winners-log animate-fade-in full-height">
+                <div className="log-panel-card">
+                  <div className="log-header">
+                    <span className="log-icon">📜</span>
+                    <h3 className="log-title">Daftar Pemenang Terkini</h3>
+                  </div>
+
+                  {pastWinners.length > 0 ? (
+                    <div className="log-table-container">
+                      <table className="log-table">
+                        <thead>
+                          <tr>
+                            <th>Waktu</th>
+                            <th>Nama Pemenang</th>
+                            <th>Peserta</th>
+                            <th>Hadiah</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pastWinners.map((w, idx) => {
+                            const isFail = w.isDisqualified || w.statusText === "HANGUS" || w.statusText === "GUGUR";
+                            return (
+                              <tr key={idx} className={`winner-row-entry ${isFail ? "is-gugur" : ""}`}>
+                                <td className="col-time">{w.drawTime}</td>
+                                <td className="col-name">{w.nama}</td>
+                                <td className="col-instansi">{w.instansi || "Peserta"}</td>
+                                <td className="col-prize">🎁 {w.prize && w.prize !== "-" ? w.prize.toUpperCase() : "-"}</td>
+                                <td className="col-status">
+                                  {isFail ? (
+                                    <span className="status-pill fail">❌ HANGUS</span>
+                                  ) : (
+                                    <span className="status-pill success">✅ SAH</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="empty-winners-placeholder">
+                      <div className="empty-icon">🏆</div>
+                      <p className="empty-text">Belum ada pemenang yang terundi.</p>
+                      <p className="empty-subtext">Pilih hadiah dan klik "ACAK PEMENANG" untuk memulai.</p>
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
+          </div>
+
+          {/* Winner Showcase Modal/Card */}
+          {winner && winnerData && (
+            <section className="winner-announcement-overlay">
+              <div className={`winner-announcement-card animate-zoom-in ${isDisqualified ? "disqualified" : ""}`}>
+                <div className="celebration-ribbon">
+                  {isDisqualified ? "❌ PEMENANG GUGUR ❌" : "🏆 PEMENANG UTAMA 🏆"}
+                </div>
+
+                <div className="card-trophy">{isDisqualified ? "❌" : "🎉"}</div>
+
+                <div className="winner-details">
+                  <p className="prize-won-tag">MEMENANGKAN {prize.toUpperCase()}</p>
+
+                  <h2 className="winner-name-glow">{winnerData.nama}</h2>
+                  <h4 className="winner-instansi-detail">{winnerData.instansi || "Peserta"}</h4>
+
+                  <div className="winner-metadata-box">
+                    <div className="meta-row">
+                      <span className="meta-label">Nomor Telepon</span>
+                      <span className="meta-val">
+                        {maskPhoneNumber(winnerData.telp)}
+                      </span>
+                    </div>
+                    <div className="meta-row">
+                      <span className="meta-label">Waktu Undian</span>
+                      <span className="meta-val">
+                        {new Date().toLocaleTimeString("id-ID", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })} WIB
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Countdown Timer Calling Box */}
+                <div className="timer-caller-box">
+                  <div className="timer-display-header">⏱️ Hitung Mundur Panggilan (10 Detik)</div>
+                  <div className={`timer-number ${countdown <= 3 && countdown > 0 ? "urgent" : ""} ${isDisqualified ? "expired" : ""}`}>
+                    {countdown} <span className="timer-unit">Detik</span>
+                  </div>
+
+                  {isDisqualified && (
+                    <div className="timer-status-badge fail">
+                      ⚠️ Waktu habis! Peserta dianggap GUGUR / Tidak Ada di Tempat.
+                    </div>
+                  )}
+
+                  <div className="timer-controls">
+                    {!isTimerRunning && countdown > 0 && (
+                      <button className="btn-timer start" onClick={startTimer}>
+                        ▶️ Mulai Hitung (10s)
+                      </button>
+                    )}
+                    {isTimerRunning && (
+                      <button className="btn-timer stop" onClick={stopTimer}>
+                        ⏸️ Hentikan Counter (Hadir)
+                      </button>
+                    )}
+                    {(isDisqualified || countdown < 10) && (
+                      <button className="btn-timer reset" onClick={resetTimer}>
+                        🔄 Reset Timer (10s)
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <p className="card-footer-note">
+                  {isDisqualified
+                    ? "Status peserta telah tercatat. Tutup modal untuk melakukan pengundian ulang."
+                    : "Selamat! Hubungi Panitia / Dinas Kominfo Sidoarjo untuk penyerahan hadiah."}
+                </p>
+
+                <button className="btn-close-winner" onClick={closeWinnerModal}>
+                  {isDisqualified ? "Tutup & Diundi Lagi" : "Tutup"}
+                </button>
+              </div>
+            </section>
+          )}
+        </div>
+      )}
 
       {/* Reset Confirmation Modal */}
       {showResetModal && (
