@@ -515,18 +515,10 @@ const App = () => {
         </header>
 
         {/* Stats Row */}
-        <section className="stats-dashboard">
+        <section className="stats-dashboard single-card">
           <div className="stat-card gold">
             <span className="stat-label">🎁 Hadiah Terpilih</span>
             <span className="stat-value">{prize ? prize.toUpperCase() : "BELUM DIPILIH"}</span>
-          </div>
-          <div className="stat-card cyan">
-            <span className="stat-label">👥 Sisa Peserta {isRefreshing && "🔄"}</span>
-            <span className="stat-value">{eligibleCount}</span>
-          </div>
-          <div className="stat-card emerald">
-            <span className="stat-label">🏆 Total Pemenang</span>
-            <span className="stat-value">{pastWinners.length}</span>
           </div>
         </section>
 
