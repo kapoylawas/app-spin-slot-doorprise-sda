@@ -4,8 +4,8 @@ import sidoarjoImage from "../public/sidoarjo.png";
 import axios from "axios";
 
 // Server API Configuration
-const API_BASE_URL = "http://10.1.18.99/api";
-// const API_BASE_URL = "http://localhost:8000/api";
+// const API_BASE_URL = "http://10.1.18.99/api";
+const API_BASE_URL = "http://localhost:8000/api";
 const API_TOKEN = "2|ydUqZdX4zdz68SIW6uPFAauTJUPTXfZhp3BjOEbne110bd43";
 
 const getApiHeaders = () => ({
@@ -169,13 +169,17 @@ const App = () => {
       // Seed/update reel items with remaining eligible participants when not actively drawing
       if (!isDrawingRef.current) {
         if (fetchedParticipants.length > 0) {
-          setReelItems(fetchedParticipants.slice(0, 3));
+          let displayItems = [...fetchedParticipants];
+          while (displayItems.length < 10 && displayItems.length > 0) {
+            displayItems = displayItems.concat(fetchedParticipants);
+          }
+          setReelItems(displayItems.slice(0, 10));
         } else {
           // All participants have been drawn
           const emptyPlaceholder = { nama: "Semua Peserta Sudah Diundi", instansi: "Sisa Peserta: 0" };
-          setReelItems([emptyPlaceholder, emptyPlaceholder, emptyPlaceholder]);
+          setReelItems(Array(10).fill(emptyPlaceholder));
         }
-        setActiveIndex(1);
+        setActiveIndex(4);
         setTranslateY(0);
         setTransitionStyle("none");
       }
@@ -204,7 +208,7 @@ const App = () => {
       console.error("Error fetching data from local API, using fallback data:", error);
       if (names.length === 0) {
         setNames(DUMMY_PARTICIPANTS);
-        setReelItems(DUMMY_PARTICIPANTS.slice(0, 3));
+        setReelItems(DUMMY_PARTICIPANTS.slice(0, 10));
       }
       if (prizesList.length === 0) {
         setPrizesList(DUMMY_PRIZES);
@@ -301,7 +305,7 @@ const App = () => {
   const playSpinTicker = () => {
     let delay = 40;
     const maxDelay = 550;
-    const duration = 4400;
+    const duration = 7900;
     const startTime = Date.now();
 
     const tick = () => {
@@ -369,38 +373,40 @@ const App = () => {
     const currentMiddle = reelItems[activeIndex] || safeEligible[1 % safeEligible.length];
     const currentBottom = reelItems[activeIndex + 1] || safeEligible[2 % safeEligible.length];
 
-    const newReel = Array(45).fill(null);
-    newReel[0] = currentTop;
-    newReel[1] = currentMiddle;
-    newReel[2] = currentBottom;
+    const newReel = Array(80).fill(null);
+    for (let i = 0; i < 9; i++) {
+      newReel[i] = reelItems[i] || safeEligible[i % safeEligible.length];
+    }
 
-    // Winner will be centered at index 40
-    newReel[40] = chosenWinner;
+    // Winner will be centered at index 70
+    newReel[70] = chosenWinner;
 
-    // Fill other spots with random eligible items (excluding the winner to avoid visual confusion)
-    const fillPool = safeEligible.filter((p) => p.id !== chosenWinner.id);
-    const fillSource = fillPool.length > 0 ? fillPool : safeEligible;
-    for (let i = 3; i < 45; i++) {
-      if (i === 40) continue;
-      newReel[i] = fillSource[Math.floor(Math.random() * fillSource.length)];
+    // Fill other spots with alternating sequence of all eligible candidates (A, B, A, B...)
+    const winnerPos = safeEligible.findIndex((p) => p.id === chosenWinner.id);
+    const validWinnerPos = winnerPos >= 0 ? winnerPos : 0;
+    for (let i = 9; i < 80; i++) {
+      if (i === 70) continue;
+      const offset = 70 - i;
+      const pos = ((validWinnerPos - offset) % safeEligible.length + safeEligible.length * 100) % safeEligible.length;
+      newReel[i] = safeEligible[pos];
     }
 
     // Set reel items and reset translate position to 0 instantly
     setReelItems(newReel);
-    setActiveIndex(40);
+    setActiveIndex(70);
     setTranslateY(0);
     setTransitionStyle("none");
 
     // Play tick sound pattern
     playSpinTicker();
 
-    // Trigger the CSS transition slide
+    // Trigger the CSS transition slide (8 seconds duration)
     setTimeout(() => {
-      setTranslateY(3900);
-      setTransitionStyle("transform 4.5s cubic-bezier(0.15, 0.85, 0.35, 1)");
+      setTranslateY(3432);
+      setTransitionStyle("transform 8s cubic-bezier(0.12, 0.88, 0.3, 1)");
     }, 50);
 
-    // When the animation completes
+    // When the animation completes (8050ms)
     setTimeout(async () => {
       setRolling(false);
       setWinner(true);

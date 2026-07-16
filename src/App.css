@@ -398,7 +398,7 @@ body {
 
 /* Viewport Window */
 .slot-machine-viewport {
-  height: 300px;
+  height: 520px;
   overflow: hidden;
   position: relative;
   border-radius: var(--radius);
@@ -410,24 +410,24 @@ body {
 /* Highlight Window */
 .slot-machine-highlight-box {
   position: absolute;
-  top: 100px;
+  top: 208px;
   left: 0;
   right: 0;
-  height: 100px;
+  height: 52px;
   border-top: 3px solid var(--color-orange);
   border-bottom: 3px solid var(--color-orange);
-  background: rgba(245, 166, 35, 0.08);
+  background: rgba(245, 166, 35, 0.12);
   z-index: 10;
   pointer-events: none;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 10px;
 }
 
 .slot-machine-highlight-box .arrow {
   color: var(--color-orange);
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 900;
   animation: arrowBounce 0.6s infinite alternate ease-in-out;
 }
@@ -441,44 +441,44 @@ body {
 }
 
 .slot-machine-item {
-  height: 100px;
+  height: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 16px;
+  padding: 0 12px;
 }
 
 .slot-item-card {
-  width: 88%;
-  height: 80px;
+  width: 94%;
+  height: 42px;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
+  flex-direction: row;
+  justify-content: space-between;
   align-items: center;
+  padding: 0 16px;
   background: var(--bg-warm);
-  border: 2px solid #e8e0d0;
-  border-radius: var(--radius);
+  border: 1.5px solid #e8e0d0;
+  border-radius: var(--radius-sm, 6px);
   transition: all 0.3s ease;
 }
 
 .slot-item-name {
-  font-size: 1.3rem;
+  font-size: 1.02rem;
   font-weight: 800;
   color: var(--text-dark);
-  text-align: center;
+  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
+  max-width: 60%;
 }
 
 .slot-item-instansi {
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-top: 2px;
+  color: #666;
+  text-align: right;
+  white-space: nowrap;
 }
 
 /* Spin Blur */
