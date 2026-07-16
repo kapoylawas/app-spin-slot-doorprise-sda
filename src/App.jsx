@@ -1,7 +1,17 @@
 import React, { useEffect, useState, useRef } from "react";
 import "./App.css";
 import sidoarjoImage from "../public/sidoarjo.png";
-import axios from "axios"; // LIVE API INTEGRATION
+import axios from "axios";
+
+// Server API Configuration
+const API_BASE_URL = "http://10.1.18.99/api";
+const API_TOKEN = "2|ydUqZdX4zdz68SIW6uPFAauTJUPTXfZhp3BjOEbne110bd43";
+
+const getApiHeaders = () => ({
+  Authorization: `Bearer ${API_TOKEN}`,
+  Accept: "application/json",
+  "Content-Type": "application/json",
+});
 
 // Fallback data representing ASN / Employees in Sidoarjo Regency if API fails
 const DUMMY_PARTICIPANTS = [
@@ -15,6 +25,12 @@ const DUMMY_PARTICIPANTS = [
   { id: 8, nama: "Mega Utami", telp: "081223344508", instansi: "Dinas Sosial Sidoarjo", status_peserta: null },
   { id: 9, nama: "Hendra Wijaya", telp: "081334455609", instansi: "Satpol PP Sidoarjo", status_peserta: null },
   { id: 10, nama: "Tri Susilo", telp: "081445566710", instansi: "BPPD Sidoarjo", status_peserta: null }
+];
+
+const DUMMY_PRIZES = [
+  { id: 1, name: "Sepeda", description: "sepeda lipat", remaining_quota: 1, total_quota: 1 },
+  { id: 2, name: "TV LG 55 Inch", description: "Smart TV", remaining_quota: 2, total_quota: 2 },
+  { id: 3, name: "Sepeda Listrik", description: "E-bike", remaining_quota: 1, total_quota: 1 },
 ];
 
 // Helper to play synthesized sounds using Web Audio API
@@ -102,15 +118,14 @@ const Confetti = () => {
 const App = () => {
   // State for all participants (filters out winners)
   const [names, setNames] = useState([]);
+  const [prizesList, setPrizesList] = useState([]);
+  const [selectedPrizeId, setSelectedPrizeId] = useState("");
+  const [prize, setPrize] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // State for past winners list
-  const [pastWinners, setPastWinners] = useState(() => {
-    const saved = localStorage.getItem("sidoarjo_doorprize_winners");
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [pastWinners, setPastWinners] = useState([]);
 
-  const [prize, setPrize] = useState("");
   const [rolling, setRolling] = useState(false);
   const [winner, setWinner] = useState(false);
   const [winnerData, setWinnerData] = useState(null);
@@ -131,68 +146,83 @@ const App = () => {
   const [translateY, setTranslateY] = useState(0);
   const [transitionStyle, setTransitionStyle] = useState("none");
 
-  // Fetch data from real production API
+  // Fetch data from local API
   const fetchData = async () => {
     setIsRefreshing(true);
     try {
-      const response = await axios.get(
-        "https://daftarhadir.sidoarjokab.go.id/api/get-peserta-doorprize?menerima=semua",
-        {
-          headers: {
-            Authorization: "fkngdfngndngfogmvo95t6509rjgr8u98-=p=-",
-          },
-        }
-      );
+      const [participantsRes, prizesRes, resultsRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/draw/participants`, { headers: getApiHeaders() }),
+        axios.get(`${API_BASE_URL}/draw/prizes`, { headers: getApiHeaders() }),
+        axios.get(`${API_BASE_URL}/draw/results`, { headers: getApiHeaders() }),
+      ]);
 
-      const eligibleParticipants = response.data.data.filter(
-        (peserta) =>
-          peserta.status_peserta === "" ||
-          peserta.status_peserta === undefined ||
-          peserta.status_peserta === null
-      );
+      // 1. Process Participants Data
+      const fetchedParticipants = (participantsRes.data?.data || []).map((p) => ({
+        ...p,
+        nama: p.name,
+        telp: p.phone,
+        instansi: p.nik ? `NIK: ${p.nik}` : "Peserta",
+      }));
+      setNames(fetchedParticipants);
 
-      setNames(eligibleParticipants);
-
-      // Seed reel items initially if they are empty
-      if (eligibleParticipants.length > 0 && reelItems.length === 0) {
-        setReelItems(eligibleParticipants.slice(0, 3));
+      // Seed reel items initially if empty
+      if (fetchedParticipants.length > 0 && reelItems.length === 0) {
+        setReelItems(fetchedParticipants.slice(0, 3));
       }
+
+      // 2. Process Prizes Data
+      const fetchedPrizes = prizesRes.data?.data || [];
+      setPrizesList(fetchedPrizes);
+
+      // 3. Process Results Data (Draw History)
+      const fetchedResults = (resultsRes.data?.data || []).map((r) => ({
+        id: r.participant_id,
+        nama: r.participant?.name || "Peserta",
+        instansi: r.participant?.nik ? `NIK: ${r.participant.nik}` : "Peserta",
+        prize: r.prize?.name || (r.result_type === "hangus" ? "GUGUR" : "-"),
+        drawTime: new Date(r.submitted_at || r.created_at).toLocaleTimeString("id-ID", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+        isDisqualified: r.result_type === "hangus",
+        statusText: r.result_type === "menang" ? "SAH" : "GUGUR",
+      }));
+      setPastWinners(fetchedResults);
+
     } catch (error) {
-      console.error("Error fetching data from API, using fallback data:", error);
-      // Fallback to dummy data to avoid blank screen if server is down
+      console.error("Error fetching data from local API, using fallback data:", error);
       if (names.length === 0) {
         setNames(DUMMY_PARTICIPANTS);
         setReelItems(DUMMY_PARTICIPANTS.slice(0, 3));
+      }
+      if (prizesList.length === 0) {
+        setPrizesList(DUMMY_PRIZES);
       }
     } finally {
       setIsRefreshing(false);
     }
   };
 
-  // Update winner status in real production API database (with retry)
-  const updateWinnerStatus = async (id, prizeValue) => {
-    const maxRetries = 3;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        await axios.get(
-          `https://daftarhadir.sidoarjokab.go.id/api/changestatus-peserta-doorprize?id=${id}&status=1&hadiah=${prizeValue}`,
-          {
-            headers: {
-              Authorization: "fkngdfngndngfogmvo95t6509rjgr8u98-=p=-",
-            },
-          }
-        );
-        console.log(`Status peserta ID ${id} berhasil diupdate ke database (attempt ${attempt})`);
-        return true; // Success
-      } catch (error) {
-        console.error(`Gagal mengupdate status peserta (attempt ${attempt}/${maxRetries}):`, error);
-        if (attempt < maxRetries) {
-          await new Promise((r) => setTimeout(r, 1000 * attempt)); // Backoff delay
-        }
-      }
+  // Submit winner result to local API
+  const submitDrawResult = async (participantId, prizeId, resultType = "menang") => {
+    try {
+      const payload = {
+        participant_id: participantId,
+        result_type: resultType,
+        prize_id: prizeId ? Number(prizeId) : null,
+        external_ref: `draw-${Date.now()}-${participantId}`,
+      };
+
+      const res = await axios.post(`${API_BASE_URL}/draw/results`, payload, {
+        headers: getApiHeaders(),
+      });
+      console.log("Hasil undian berhasil disimpan ke server:", res.data);
+      return true;
+    } catch (error) {
+      console.error("Gagal menyimpan hasil undian ke API server:", error?.response?.data || error.message);
+      return false;
     }
-    console.error(`CRITICAL: Gagal mengupdate status peserta ID ${id} setelah ${maxRetries} percobaan!`);
-    return false;
   };
 
   // Fetch initial data on load
@@ -216,7 +246,6 @@ const App = () => {
               if (prevLog.length === 0) return prevLog;
               const updated = [...prevLog];
               updated[0] = { ...updated[0], isDisqualified: true, statusText: "GUGUR" };
-              localStorage.setItem("sidoarjo_doorprize_winners", JSON.stringify(updated));
               return updated;
             });
 
@@ -265,7 +294,7 @@ const App = () => {
 
   const startDraw = () => {
     // GUARD 1: Prize must be selected
-    if (!prize) {
+    if (!selectedPrizeId && !prize) {
       setShowToast(true);
       setTimeout(() => setShowToast(false), 5000);
       return;
@@ -280,7 +309,7 @@ const App = () => {
     // GUARD 4: Build eligible list — exclude anyone with status_peserta set
     const eligible = names.filter((peserta) => !peserta.status_peserta);
 
-    // GUARD 5: Cross-check against local pastWinners as a safety net
+    // GUARD 5: Cross-check against pastWinners as safety net
     const pastWinnerIds = new Set(pastWinners.map((w) => w.id));
     const safeEligible = eligible.filter((p) => !pastWinnerIds.has(p.id));
 
@@ -358,29 +387,13 @@ const App = () => {
       setIsDisqualified(false);
       playSound("win");
 
-      // Update winner status in production database via API (with retry)
+      // Submit winner result to local API database
       if (chosenWinner.id) {
-        await updateWinnerStatus(chosenWinner.id, prize);
+        await submitDrawResult(chosenWinner.id, selectedPrizeId, "menang");
       }
 
-      // Add to past winners log (default: SAH)
-      const timeStr = new Date().toLocaleTimeString("id-ID", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
-      const newWinnerRecord = {
-        ...chosenWinner,
-        prize: prize,
-        drawTime: timeStr,
-        isDisqualified: false,
-        statusText: "SAH",
-      };
-      setPastWinners((prev) => {
-        const updated = [newWinnerRecord, ...prev];
-        localStorage.setItem("sidoarjo_doorprize_winners", JSON.stringify(updated));
-        return updated;
-      });
+      // Re-fetch fresh data from API
+      await fetchData();
 
       // Release the draw lock
       isDrawingRef.current = false;
@@ -393,7 +406,7 @@ const App = () => {
     setIsTimerRunning(false);
     setCountdown(10);
     setIsDisqualified(false);
-    // Re-sync with API to get fresh eligible list (will exclude winners in DB)
+    // Re-sync with API to get fresh eligible list & prizes
     await fetchData();
   };
 
@@ -418,7 +431,6 @@ const App = () => {
       const updated = [...prevLog];
       if (updated[0].statusText === "GUGUR") {
         updated[0] = { ...updated[0], isDisqualified: false, statusText: "SAH" };
-        localStorage.setItem("sidoarjo_doorprize_winners", JSON.stringify(updated));
       }
       return updated;
     });
@@ -430,11 +442,11 @@ const App = () => {
   };
 
   const confirmReset = () => {
-    localStorage.removeItem("sidoarjo_doorprize_winners");
     setPastWinners([]);
     setWinner(false);
     setWinnerData(null);
     setPrize("");
+    setSelectedPrizeId("");
     setShowResetModal(false);
     fetchData(); // Re-sync with API
   };
@@ -491,47 +503,26 @@ const App = () => {
                 <h3 className="panel-title">Langkah 1: Pilih Hadiah Menarik</h3>
                 <div className="select-dropdown-wrapper">
                   <select
-                    value={prize}
-                    onChange={(e) => setPrize(e.target.value)}
+                    value={selectedPrizeId}
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      setSelectedPrizeId(selectedId);
+                      const selectedObj = prizesList.find((p) => String(p.id) === String(selectedId));
+                      if (selectedObj) {
+                        setPrize(selectedObj.name);
+                      }
+                    }}
                     className="custom-dropdown"
-                    disabled={rolling}
+                    disabled={rolling || prizesList.length === 0}
                   >
                     <option value="" disabled hidden>
-                      -- Silakan Pilih Hadiah --
+                      {prizesList.length > 0 ? "-- Silakan Pilih Hadiah --" : "-- Hadiah Tidak Tersedia / Kuota Habis --"}
                     </option>
-                    <option value="tv lg 55 inch">📺 TV LG 55 Inch</option>
-                    <option value="sepeda listrik">⚡ Sepeda Listrik</option>
-                    <option value="lemari es 2 pintu polytron">🥶 Lemari Es 2 Pintu Polytron</option>
-                    <option value="huawe watch fit 3">⌚ Huawei Watch FIT 3</option>
-                    <option value="tv 32 inch">📺 TV 32"</option>
-                    <option value="huawe watch gt 5">⌚ Huawei Watch GT 5</option>
-                    <option value="sepeda phoenix">🚲 Sepeda Phoenix</option>
-                    <option value="sepeda trex">🚲 Sepeda Trex</option>
-                    <option value="hp redmi a5">📱 HP Redmi A5</option>
-                    <option value="magiccom miyako">🍚 MagicCom Miyako</option>
-                    <option value="magiccom">🍚 MagicCom</option>
-                    <option value="oven">🍪 Oven</option>
-                    <option value="almari plastik">🗄️ Almari Plastik</option>
-                    <option value="tabungan delta arta 500k">💰 Tabungan Delta Art @Rp.500.000</option>
-                    <option value="kominfo jatim 500k">💰 Kominfo Jatim 500k</option>
-                    <option value="tabungan bank jatim">💰 Tabungan Bank Jatim</option>
-                    <option value="set alat makan">🍽️ Set Alat Makan</option>
-                    <option value="kompor gas rinai">🔥 Kompor Gas Rinai</option>
-                    <option value="kompor gas miyako">🔥 Kompor Gas Miyako</option>
-                    <option value="kipas angin miyako">🌀 Kipas Angin Miyako</option>
-                    <option value="kipas angin">🌀 Kipas Angin</option>
-                    <option value="set cangkir">🍵 Set Cangkir</option>
-                    <option value="setrika listrik">👔 Setrika Listrik</option>
-                    <option value="setrika maspion">👔 Setrika Maspion</option>
-                    <option value="setrika">👔 Setrika</option>
-                    <option value="blender maspion">🧃 Blender Maspion</option>
-                    <option value="dispenser miyako">🚰 Dispenser Miyako</option>
-                    <option value="payung">☂️ Payung</option>
-                    <option value="mug">☕ Mug</option>
-                    <option value="tumbler">💧 Tumbler</option>
-                    <option value="bantal">🛏️ Bantal</option>
-                    <option value="headphone">🎧 Headphone</option>
-                    <option value="rice cooker philip">🍚 Rice Cooker Philip</option>
+                    {prizesList.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        🎁 {p.name.toUpperCase()} (Sisa Quota: {p.remaining_quota})
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -601,7 +592,7 @@ const App = () => {
                   onClick={resetLottery}
                   disabled={rolling}
                 >
-                  Reset Winner Log
+                  Refresh Data API
                 </button>
               </div>
             </section>
@@ -634,7 +625,7 @@ const App = () => {
                             <td className="col-time">{w.drawTime}</td>
                             <td className="col-name">{w.nama}</td>
                             <td className="col-instansi">{w.instansi || "Peserta"}</td>
-                            <td className="col-prize">🎁 {w.prize.toUpperCase()}</td>
+                            <td className="col-prize">🎁 {w.prize ? w.prize.toUpperCase() : "-"}</td>
                             <td className="col-status">
                               {w.isDisqualified || w.statusText === "GUGUR" ? (
                                 <span className="status-pill fail">❌ GUGUR</span>
@@ -744,24 +735,15 @@ const App = () => {
       {showResetModal && (
         <div className="reset-modal-overlay" onClick={() => setShowResetModal(false)}>
           <div className="reset-modal-card animate-zoom-in" onClick={(e) => e.stopPropagation()}>
-            {/* Warning Icon */}
             <div className="reset-modal-icon">
               <img src={sidoarjoImage} alt="Logo Sidoarjo" className="reset-modal-logo" />
             </div>
 
-            <h3 className="reset-modal-title">Reset Data Pemenang?</h3>
+            <h3 className="reset-modal-title">Sinkronkan Ulang Data API?</h3>
 
             <p className="reset-modal-desc">
-              Seluruh daftar pemenang lokal akan dihapus dan hadiah yang dipilih akan direset.
-              Data peserta akan disinkronkan ulang dari server.
+              Data peserta, hadiah, dan riwayat pemenang akan disinkronkan ulang langsung dari database server local.
             </p>
-
-            <div className="reset-modal-warning-box">
-              <span className="reset-warning-icon">💡</span>
-              <span className="reset-warning-text">
-                Tindakan ini tidak dapat dibatalkan setelah dikonfirmasi.
-              </span>
-            </div>
 
             <div className="reset-modal-actions">
               <button
@@ -774,7 +756,7 @@ const App = () => {
                 className="reset-modal-btn confirm"
                 onClick={confirmReset}
               >
-                Ya, Reset Sekarang
+                Ya, Sinkronkan
               </button>
             </div>
           </div>
