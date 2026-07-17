@@ -124,6 +124,15 @@ const App = () => {
   const [prize, setPrize] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // View navigation state ('spin' or 'mc')
+  const [viewMode, setViewMode] = useState(() => {
+    if (window.location.hash === "#mc" || window.location.search.includes("mode=mc")) {
+      return "mc";
+    }
+    return "spin";
+  });
+  const [mcSearchQuery, setMcSearchQuery] = useState("");
+
   // State for past winners list
   const [pastWinners, setPastWinners] = useState([]);
 
@@ -142,12 +151,123 @@ const App = () => {
 
   // Hard lock to prevent double-click rapid spin (useRef is synchronous, unlike setState)
   const isDrawingRef = useRef(false);
+  const startDrawRef = useRef(null);
 
   // Reel-specific animation states
   const [reelItems, setReelItems] = useState([]);
   const [activeIndex, setActiveIndex] = useState(1);
   const [translateY, setTranslateY] = useState(0);
   const [transitionStyle, setTransitionStyle] = useState("none");
+
+  // Keep startDrawRef updated with latest startDraw implementation
+  useEffect(() => {
+    startDrawRef.current = startDraw;
+  });
+
+  // Helper to cycle through prizes using Arrow Up / Arrow Down or Number keys (1-9)
+  const cyclePrize = (direction) => {
+    if (rolling || prizesList.length === 0) return;
+    const availablePrizes = prizesList.filter((p) => p.remaining_quota > 0);
+    if (availablePrizes.length === 0) return;
+
+    let currentIndex = availablePrizes.findIndex((p) => String(p.id) === String(selectedPrizeId));
+    let nextIndex;
+    if (currentIndex === -1) {
+      nextIndex = direction > 0 ? 0 : availablePrizes.length - 1;
+    } else {
+      nextIndex = (currentIndex + direction + availablePrizes.length) % availablePrizes.length;
+    }
+    const nextPrize = availablePrizes[nextIndex];
+    setSelectedPrizeId(String(nextPrize.id));
+    setPrize(nextPrize.name);
+    playSound("beep");
+    setToastMessage(`🎁 Hadiah terpilih: ${nextPrize.name.toUpperCase()} (Sisa Quota: ${nextPrize.remaining_quota})`);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
+
+  const selectPrizeByNumber = (numKey) => {
+    if (rolling || prizesList.length === 0) return;
+    const index = parseInt(numKey, 10) - 1;
+    const availablePrizes = prizesList.filter((p) => p.remaining_quota > 0);
+    if (availablePrizes[index]) {
+      const p = availablePrizes[index];
+      setSelectedPrizeId(String(p.id));
+      setPrize(p.name);
+      playSound("beep");
+      setToastMessage(`🎁 Hadiah terpilih (#${numKey}): ${p.name.toUpperCase()} (Sisa Quota: ${p.remaining_quota})`);
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+    }
+  };
+
+  // Global Keyboard & Remote Presenter Listener (Space, Enter, PageDown, RightArrow, ArrowUp/Down, Numbers 1-9, etc.)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ignore key events when typing inside text inputs, textareas, or dropdown selects
+      const tag = e.target ? e.target.tagName : "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target && e.target.isContentEditable)) {
+        return;
+      }
+
+      // Close modal on Escape
+      if (e.key === "Escape") {
+        if (winner) {
+          closeWinnerModal();
+          return;
+        }
+        if (showResetModal) {
+          setShowResetModal(false);
+          return;
+        }
+        if (cancelTargetWinner) {
+          setCancelTargetWinner(null);
+          return;
+        }
+      }
+
+      // Navigate/cycle prize using ArrowUp / ArrowDown
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (viewMode === "spin" && !rolling && !winner && !showResetModal && !cancelTargetWinner) {
+          cyclePrize(-1);
+        }
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (viewMode === "spin" && !rolling && !winner && !showResetModal && !cancelTargetWinner) {
+          cyclePrize(1);
+        }
+        return;
+      }
+
+      // Fast prize selection with number keys 1-9
+      if (/^[1-9]$/.test(e.key)) {
+        if (viewMode === "spin" && !rolling && !winner && !showResetModal && !cancelTargetWinner) {
+          selectPrizeByNumber(e.key);
+        }
+        return;
+      }
+
+      // Trigger draw (or close winner modal) on Space, Enter, PageDown, ArrowRight (supported by keyboard & presenter clickers)
+      if (["Space", " ", "Enter", "NumpadEnter", "PageDown", "ArrowRight"].includes(e.key)) {
+        e.preventDefault();
+
+        if (winner) {
+          // If winner announcement modal is currently open, pressing key closes it so MC can draw next winner
+          closeWinnerModal();
+        } else if (viewMode === "spin" && !rolling && !showResetModal && !cancelTargetWinner) {
+          if (startDrawRef.current) {
+            startDrawRef.current();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [winner, viewMode, rolling, showResetModal, cancelTargetWinner, selectedPrizeId, prizesList]);
 
   // Fetch data from local API (isSilent = true for background polling without UI flickering)
   const fetchData = async (isSilent = false) => {
@@ -260,15 +380,6 @@ const App = () => {
       return false;
     }
   };
-
-  // View navigation state ('spin' or 'mc')
-  const [viewMode, setViewMode] = useState(() => {
-    if (window.location.hash === "#mc" || window.location.search.includes("mode=mc")) {
-      return "mc";
-    }
-    return "spin";
-  });
-  const [mcSearchQuery, setMcSearchQuery] = useState("");
 
   // Listen to hash change for direct URL routing (#mc / #spin)
   useEffect(() => {
@@ -872,6 +983,9 @@ const App = () => {
                       })}
                     </select>
                   </div>
+                  <div style={{ fontSize: "0.78rem", fontWeight: "700", color: "#666", marginTop: "8px", textAlign: "center" }}>
+                    💡 Tip Keyboard: Tekan <strong>Panah Atas (↑) / Bawah (↓)</strong> atau <strong>Angka 1 - 9</strong> untuk ganti hadiah
+                  </div>
                 </div>
               </section>
 
@@ -928,17 +1042,22 @@ const App = () => {
                     onClick={startDraw}
                     disabled={rolling || eligibleCount === 0 || isPrizeQuotaExhausted}
                   >
-                    <span className="btn-text">
-                      {rolling
-                        ? "MENGACAK NAMA..."
-                        : eligibleCount === 0
-                          ? "SEMUA PESERTA SUDAH DIUNDI"
-                          : !selectedPrizeId
-                            ? "PILIH HADIAH TERLEBIH DAHULU"
-                            : isPrizeQuotaExhausted
-                              ? "KUOTA HADIAH HABIS"
-                              : "ACAK PEMENANG"}
-                    </span>
+                    <div className="btn-draw-content">
+                      <span className="btn-text">
+                        {rolling
+                          ? "MENGACAK NAMA..."
+                          : eligibleCount === 0
+                            ? "SEMUA PESERTA SUDAH DIUNDI"
+                            : !selectedPrizeId
+                              ? "PILIH HADIAH TERLEBIH DAHULU"
+                              : isPrizeQuotaExhausted
+                                ? "KUOTA HADIAH HABIS"
+                                : "ACAK PEMENANG"}
+                      </span>
+                      {!rolling && eligibleCount > 0 && selectedPrizeId && !isPrizeQuotaExhausted && (
+                        <span className="btn-key-hint">⌨️ Tekan SPACE / ENTER / Remote Clicker</span>
+                      )}
+                    </div>
                     <span className="btn-glow"></span>
                   </button>
 
@@ -1090,7 +1209,7 @@ const App = () => {
                 </p>
 
                 <button className="btn-close-winner" onClick={closeWinnerModal}>
-                  {isDisqualified ? "Tutup & Diundi Lagi" : "Tutup"}
+                  {isDisqualified ? "Tutup & Diundi Lagi (Space/Enter/Esc)" : "Tutup (Space/Enter/Esc)"}
                 </button>
               </div>
             </section>
