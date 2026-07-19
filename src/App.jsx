@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import "./App.css";
-import sidoarjoImage from "../public/sidoarjo.png";
 import axios from "axios";
+
+const sidoarjoImage = "/sidoarjo.png";
 
 // Server API Configuration
 const API_BASE_URL = "http://10.1.18.99/api";
@@ -45,7 +46,7 @@ const getAudioContext = () => {
     }
   }
   if (globalAudioCtx && globalAudioCtx.state === "suspended") {
-    globalAudioCtx.resume().catch(() => {});
+    globalAudioCtx.resume().catch(() => { });
   }
   return globalAudioCtx;
 };
@@ -197,6 +198,59 @@ const App = () => {
     }
   };
 
+  // Default security PIN: '1234' (can be overridden in localStorage or via URL ?pin=1234)
+  const [securityPin, setSecurityPin] = useState(() => localStorage.getItem("app_security_pin") || "diskominfo@2026#");
+  const [isUnlocked, setIsUnlocked] = useState(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const pinParam = urlParams.get("pin");
+    const currentPin = localStorage.getItem("app_security_pin") || "diskominfo@2026#";
+    if (pinParam === currentPin) {
+      sessionStorage.setItem("app_is_unlocked", "true");
+      return true;
+    }
+    return sessionStorage.getItem("app_is_unlocked") === "true";
+  });
+  const [pinInputValue, setPinInputValue] = useState("");
+  const [pinErrorMsg, setPinErrorMsg] = useState("");
+  const [showPinSettings, setShowPinSettings] = useState(false);
+  const [newPinInput, setNewPinInput] = useState("");
+
+  const handleUnlockSubmit = (e) => {
+    e?.preventDefault();
+    if (pinInputValue.trim() === securityPin) {
+      setIsUnlocked(true);
+      sessionStorage.setItem("app_is_unlocked", "true");
+      setPinErrorMsg("");
+      setPinInputValue("");
+      playSound("beep");
+    } else {
+      setPinErrorMsg("❌ PIN Salah! Akses ditolak.");
+      playSound("fail");
+    }
+  };
+
+  const handleLockApp = () => {
+    setIsUnlocked(false);
+    sessionStorage.setItem("app_is_unlocked", "false");
+    setPinInputValue("");
+    setPinErrorMsg("");
+  };
+
+  const handleChangePinSubmit = (e) => {
+    e?.preventDefault();
+    if (!newPinInput.trim() || newPinInput.trim().length < 4) {
+      alert("⚠️ PIN Keamanan minimal 4 karakter / angka!");
+      return;
+    }
+    setSecurityPin(newPinInput.trim());
+    localStorage.setItem("app_security_pin", newPinInput.trim());
+    setShowPinSettings(false);
+    setNewPinInput("");
+    setToastMessage(`🔑 PIN Keamanan berhasil diubah menjadi: ${newPinInput.trim()}`);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 4000);
+  };
+
   // View navigation state ('spin' or 'mc')
   const [viewMode, setViewMode] = useState(() => {
     if (window.location.hash === "#mc" || window.location.search.includes("mode=mc")) {
@@ -335,6 +389,8 @@ const App = () => {
   // Global Keyboard & Remote Presenter Listener (Space, Enter, PageDown, RightArrow, ArrowUp/Down, Numbers 1-9, etc.)
   useEffect(() => {
     const handleKeyDown = (e) => {
+      if (!isUnlocked) return;
+
       // Ignore key events when typing inside text inputs, textareas, or dropdown selects
       const tag = e.target ? e.target.tagName : "";
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target && e.target.isContentEditable)) {
@@ -882,6 +938,44 @@ const App = () => {
     );
   });
 
+  if (!isUnlocked) {
+    return (
+      <div className="app-lock-overlay">
+        <div className="app-lock-card animate-zoom-in">
+          <div className="app-lock-logo-wrapper">
+            <img src={sidoarjoImage} alt="Logo Sidoarjo" className="app-lock-logo" />
+          </div>
+
+          <div className="app-lock-badge">🔒 AKSES DILINDUNGI KHUSUS PANITIA / MC</div>
+          <h2 className="app-lock-title">SIDOARJO LUCKY DRAW</h2>
+          <p className="app-lock-desc">
+            Sistem pengundian dikunci untuk mencegah akses tidak sah dari perangkat luar di alamat <code>http://10.1.18.100</code>.
+          </p>
+
+          <form onSubmit={handleUnlockSubmit} className="app-lock-form">
+            <input
+              type="password"
+              placeholder="🔑 Masukkan PIN Keamanan..."
+              value={pinInputValue}
+              onChange={(e) => {
+                setPinInputValue(e.target.value);
+                setPinErrorMsg("");
+              }}
+              className="app-lock-input"
+              autoFocus
+            />
+
+            {pinErrorMsg && <div className="app-lock-error">{pinErrorMsg}</div>}
+
+            <button type="submit" className="btn-app-unlock">
+              🔓 Buka Akses Aplikasi
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`lucky-draw-root ${viewMode === "spin" ? "videotron-mode" : "mc-mode"} ${isFullscreen ? "is-fullscreen" : ""}`}>
 
@@ -928,6 +1022,14 @@ const App = () => {
             title="Toggle Mode Fullscreen / Layar Penuh (Tekan 'F')"
           >
             {isFullscreen ? "↙ Keluar Fullscreen" : "⛶ Mode Fullscreen (F)"}
+          </button>
+
+          <button
+            className="btn-lock-app-toggle"
+            onClick={handleLockApp}
+            title="Kunci Akses Aplikasi (Memerlukan PIN lagi)"
+          >
+            🔒 Kunci App
           </button>
 
           <div className="live-indicator">
@@ -1555,6 +1657,42 @@ const App = () => {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* PIN Settings Modal */}
+      {showPinSettings && (
+        <div className="reset-modal-overlay" onClick={() => setShowPinSettings(false)}>
+          <div className="reset-modal-card animate-zoom-in" onClick={(e) => e.stopPropagation()}>
+            <div className="reset-modal-icon">🔑</div>
+            <h3 className="reset-modal-title">Ganti PIN Keamanan Aplikasi</h3>
+            <p className="reset-modal-desc">
+              PIN saat ini: <strong>{securityPin}</strong>. Masukkan PIN baru minimal 4 karakter:
+            </p>
+            <form onSubmit={handleChangePinSubmit} style={{ marginTop: "12px" }}>
+              <input
+                type="text"
+                placeholder="Masukkan PIN Baru..."
+                value={newPinInput}
+                onChange={(e) => setNewPinInput(e.target.value)}
+                className="mc-input-field"
+                style={{ textAlign: "center", fontSize: "1.2rem", fontWeight: "900", letterSpacing: "2px" }}
+                autoFocus
+              />
+              <div className="reset-modal-actions" style={{ marginTop: "16px" }}>
+                <button
+                  type="button"
+                  className="reset-modal-btn cancel"
+                  onClick={() => setShowPinSettings(false)}
+                >
+                  Batal
+                </button>
+                <button type="submit" className="reset-modal-btn confirm">
+                  Simpan PIN Baru
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
