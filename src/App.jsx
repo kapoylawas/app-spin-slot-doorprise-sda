@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import "./App.css";
 import axios from "axios";
+import { io } from "socket.io-client";
 
 const sidoarjoImage = "/sidoarjo.png";
 
@@ -140,6 +141,11 @@ const App = () => {
   const [names, setNames] = useState([]);
   const [prizesList, setPrizesList] = useState([]);
   const [selectedPrizeId, setSelectedPrizeId] = useState("");
+  const selectedPrizeIdRef = useRef(selectedPrizeId);
+  useEffect(() => {
+    selectedPrizeIdRef.current = selectedPrizeId;
+  }, [selectedPrizeId]);
+
   const [prize, setPrize] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -260,6 +266,19 @@ const App = () => {
   });
   const [mcSearchQuery, setMcSearchQuery] = useState("");
 
+  // Socket.IO LAN Dual-Screen Control State
+  const [appMode, setAppMode] = useState(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const m = urlParams.get("mode");
+    if (m === "controller" || m === "display" || m === "mc") return m;
+    if (window.location.hash.includes("controller")) return "controller";
+    if (window.location.hash.includes("display")) return "display";
+    return "single";
+  });
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [socketClients, setSocketClients] = useState({ total: 0, controller: 0, display: 0 });
+  const socketRef = useRef(null);
+
   // State for past winners list
   const [pastWinners, setPastWinners] = useState([]);
 
@@ -349,6 +368,103 @@ const App = () => {
     startDrawRef.current = startDraw;
   });
 
+  useEffect(() => {
+    const host = window.location.hostname || "localhost";
+    const socketUrl = `http://${host}:3001`;
+    const socket = io(socketUrl, {
+      transports: ["websocket", "polling"],
+      reconnectionAttempts: 20,
+      reconnectionDelay: 1000,
+    });
+
+    socket.on("connect", () => {
+      setSocketConnected(true);
+      socket.emit("identify", appMode);
+    });
+
+    socket.on("disconnect", () => {
+      setSocketConnected(false);
+    });
+
+    socket.on("clients:status", (status) => {
+      setSocketClients(status);
+    });
+
+    socket.on("state:update", (state) => {
+      console.log("[State Update Received]:", state);
+      if (state && state.selectedPrizeId) {
+        const pIdStr = String(state.selectedPrizeId);
+        setSelectedPrizeId(pIdStr);
+        selectedPrizeIdRef.current = pIdStr;
+        if (state.prizeName) setPrize(state.prizeName);
+      }
+    });
+
+    socket.on("remote:event", (data) => {
+      console.log("[Remote Event Received]:", data);
+      if (data.type === "SPIN_START") {
+        if (data.prizeId) {
+          const pIdStr = String(data.prizeId);
+          setSelectedPrizeId(pIdStr);
+          selectedPrizeIdRef.current = pIdStr;
+          setPrize(data.prizeName || "");
+        }
+        if (startDrawRef.current) startDrawRef.current(true, data.winner);
+      } else if (data.type === "SELECT_PRIZE") {
+        const pIdStr = String(data.prizeId);
+        setSelectedPrizeId(pIdStr);
+        selectedPrizeIdRef.current = pIdStr;
+        setPrize(data.prizeName || "");
+      } else if (data.type === "START_TIMER") {
+        setIsTimerRunning(true);
+      } else if (data.type === "STOP_TIMER") {
+        setIsTimerRunning(false);
+      } else if (data.type === "RESET_TIMER") {
+        setIsTimerRunning(false);
+        setCountdown(10);
+        setIsDisqualified(false);
+      } else if (data.type === "CLOSE_WINNER") {
+        setWinner(false);
+        setWinnerData(null);
+        setIsTimerRunning(false);
+        setCountdown(10);
+        setIsDisqualified(false);
+        fetchData();
+      } else if (data.type === "SPIN_WIN") {
+        setRolling(false);
+        setWinner(true);
+        setWinnerData(data.winnerData);
+        setCountdown(10);
+        setIsTimerRunning(false);
+      }
+    });
+
+    socketRef.current = socket;
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [appMode]);
+
+  const sendRemoteAction = (actionType, payload = {}) => {
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit("remote:action", { type: actionType, ...payload });
+    }
+  };
+
+  const selectPrizeDirect = (p) => {
+    if (rolling || !p || p.remaining_quota <= 0) return;
+    const pIdStr = String(p.id);
+    setSelectedPrizeId(pIdStr);
+    selectedPrizeIdRef.current = pIdStr;
+    setPrize(p.name);
+    sendRemoteAction("SELECT_PRIZE", { prizeId: p.id, prizeName: p.name });
+    playSound("beep");
+    setToastMessage(`🎁 Hadiah terpilih: ${p.name.toUpperCase()} (Sisa Quota: ${p.remaining_quota})`);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
+
   // Helper to cycle through prizes using Arrow Up / Arrow Down or Number keys (1-9)
   const cyclePrize = (direction) => {
     if (rolling || prizesList.length === 0) return;
@@ -363,8 +479,11 @@ const App = () => {
       nextIndex = (currentIndex + direction + availablePrizes.length) % availablePrizes.length;
     }
     const nextPrize = availablePrizes[nextIndex];
-    setSelectedPrizeId(String(nextPrize.id));
+    const pIdStr = String(nextPrize.id);
+    setSelectedPrizeId(pIdStr);
+    selectedPrizeIdRef.current = pIdStr;
     setPrize(nextPrize.name);
+    sendRemoteAction("SELECT_PRIZE", { prizeId: nextPrize.id, prizeName: nextPrize.name });
     playSound("beep");
     setToastMessage(`🎁 Hadiah terpilih: ${nextPrize.name.toUpperCase()} (Sisa Quota: ${nextPrize.remaining_quota})`);
     setShowToast(true);
@@ -377,8 +496,11 @@ const App = () => {
     const availablePrizes = prizesList.filter((p) => p.remaining_quota > 0);
     if (availablePrizes[index]) {
       const p = availablePrizes[index];
-      setSelectedPrizeId(String(p.id));
+      const pIdStr = String(p.id);
+      setSelectedPrizeId(pIdStr);
+      selectedPrizeIdRef.current = pIdStr;
       setPrize(p.name);
+      sendRemoteAction("SELECT_PRIZE", { prizeId: p.id, prizeName: p.name });
       playSound("beep");
       setToastMessage(`🎁 Hadiah terpilih (#${numKey}): ${p.name.toUpperCase()} (Sisa Quota: ${p.remaining_quota})`);
       setShowToast(true);
@@ -563,6 +685,32 @@ const App = () => {
         };
       });
       setPrizesList(processedPrizes);
+      if (selectedPrizeIdRef.current && processedPrizes.length > 0) {
+        const currentIdStr = String(selectedPrizeIdRef.current);
+        let matchedPrize = processedPrizes.find((p) => String(p.id) === currentIdStr);
+        
+        if (!matchedPrize && !isNaN(Number(currentIdStr))) {
+          const idx = Number(currentIdStr) - 1;
+          if (processedPrizes[idx]) matchedPrize = processedPrizes[idx];
+        }
+
+        if (!matchedPrize && prize) {
+          matchedPrize = processedPrizes.find((p) => p.name && p.name.toLowerCase() === prize.toLowerCase());
+        }
+
+        if (matchedPrize) {
+          setSelectedPrizeId(String(matchedPrize.id));
+          selectedPrizeIdRef.current = String(matchedPrize.id);
+          setPrize(matchedPrize.name);
+        }
+      } else if (!selectedPrizeIdRef.current && processedPrizes.length > 0) {
+        const available = processedPrizes.find((p) => p.remaining_quota > 0);
+        if (available) {
+          setSelectedPrizeId(String(available.id));
+          selectedPrizeIdRef.current = String(available.id);
+          setPrize(available.name);
+        }
+      }
 
     } catch (error) {
       console.error("Error fetching data from local API, using fallback data:", error);
@@ -572,6 +720,26 @@ const App = () => {
       }
       if (prizesList.length === 0) {
         setPrizesList(DUMMY_PRIZES);
+        if (selectedPrizeIdRef.current && DUMMY_PRIZES.length > 0) {
+          const currentIdStr = String(selectedPrizeIdRef.current);
+          let matchedPrize = DUMMY_PRIZES.find((p) => String(p.id) === currentIdStr);
+          if (!matchedPrize && !isNaN(Number(currentIdStr))) {
+            const idx = Number(currentIdStr) - 1;
+            if (DUMMY_PRIZES[idx]) matchedPrize = DUMMY_PRIZES[idx];
+          }
+          if (matchedPrize) {
+            setSelectedPrizeId(String(matchedPrize.id));
+            selectedPrizeIdRef.current = String(matchedPrize.id);
+            setPrize(matchedPrize.name);
+          }
+        } else if (!selectedPrizeIdRef.current && DUMMY_PRIZES.length > 0) {
+          const available = DUMMY_PRIZES.find((p) => p.remaining_quota > 0);
+          if (available) {
+            setSelectedPrizeId(String(available.id));
+            selectedPrizeIdRef.current = String(available.id);
+            setPrize(available.name);
+          }
+        }
       }
     } finally {
       if (!isSilent) setIsRefreshing(false);
@@ -718,7 +886,7 @@ const App = () => {
     tick();
   };
 
-  const startDraw = () => {
+  const startDraw = (isRemoteCall = false, presetWinner = null) => {
     // GUARD 1: Prize must be selected and have remaining quota > 0
     const selectedPrizeObj = prizesList.find((p) => String(p.id) === String(selectedPrizeId));
     if (!selectedPrizeId || !selectedPrizeObj) {
@@ -740,12 +908,32 @@ const App = () => {
 
     // GUARD 4: Build eligible list — exclude anyone with status_peserta set
     const eligible = names.filter((peserta) => !peserta.status_peserta);
-
-    // GUARD 5: Cross-check against pastWinners as safety net
     const pastWinnerIds = new Set(pastWinners.map((w) => w.id));
     const safeEligible = eligible.filter((p) => !pastWinnerIds.has(p.id));
 
-    if (rolling || safeEligible.length === 0) return;
+    if (rolling || (safeEligible.length === 0 && !presetWinner)) return;
+
+    // Determine chosen winner (Use presetWinner if received via remote socket, otherwise pick locally)
+    let chosenWinner = presetWinner;
+    if (!chosenWinner) {
+      let randomValue;
+      if (window.crypto && window.crypto.getRandomValues) {
+        const arr = new Uint32Array(1);
+        window.crypto.getRandomValues(arr);
+        randomValue = arr[0] / (0xFFFFFFFF + 1);
+      } else {
+        randomValue = Math.random();
+      }
+      const targetIdx = Math.floor(randomValue * safeEligible.length);
+      chosenWinner = safeEligible[targetIdx];
+    }
+
+    if (!chosenWinner) return;
+
+    // Emit remote event if triggered locally (Include chosenWinner so Display uses exact same winner!)
+    if (!isRemoteCall) {
+      sendRemoteAction("SPIN_START", { prizeId: selectedPrizeId, prizeName: prize, winner: chosenWinner });
+    }
 
     // LOCK the draw — synchronous, no race condition possible
     isDrawingRef.current = true;
@@ -753,26 +941,11 @@ const App = () => {
     setRolling(true);
     setWinnerData(null);
 
-    // Use crypto-grade randomness when available, fallback to Math.random
-    let randomValue;
-    if (window.crypto && window.crypto.getRandomValues) {
-      const arr = new Uint32Array(1);
-      window.crypto.getRandomValues(arr);
-      randomValue = arr[0] / (0xFFFFFFFF + 1);
-    } else {
-      randomValue = Math.random();
-    }
-
-    // 1. Pick winner randomly using crypto-grade randomness across ALL eligible candidates (1 to 2000)
-    const targetIdx = Math.floor(randomValue * safeEligible.length);
-    const chosenWinner = safeEligible[targetIdx];
-
     // Immediately remove chosen winner from local candidate list state to prevent re-selection
     setNames((prevNames) => prevNames.filter((p) => p.id !== chosenWinner.id));
 
-    // 2. Create a fully shuffled pool of ALL 2000 participants (Fisher-Yates Shuffle)
-    // so registration numbers from early, middle, and late batches are completely mixed up on the wheel
-    const shuffledPool = [...safeEligible];
+    // 2. Create a fully shuffled pool of ALL participants (Fisher-Yates Shuffle)
+    const shuffledPool = safeEligible.length > 0 ? [...safeEligible] : [chosenWinner, ...DUMMY_PARTICIPANTS];
     for (let j = shuffledPool.length - 1; j > 0; j--) {
       const k = Math.floor(Math.random() * (j + 1));
       [shuffledPool[j], shuffledPool[k]] = [shuffledPool[k], shuffledPool[j]];
@@ -780,19 +953,19 @@ const App = () => {
 
     const newReel = Array(160).fill(null);
 
-    // Keep top items matching current view to prevent jumpiness on initial spin frame
-    for (let i = 0; i < 4; i++) {
-      newReel[i] = reelItems[i] || shuffledPool[i % shuffledPool.length];
+    // Keep initial items (0..8) matching currently visible viewport items (indices 140..148 from previous spin) to prevent jumpiness on initial spin frame
+    for (let i = 0; i < 9; i++) {
+      newReel[i] = reelItems[140 + i] || reelItems[i] || shuffledPool[i % shuffledPool.length];
     }
 
     // Winner will be centered in the highlight box at index 144 (viewport offset 4 + 140 scrolled slots = 144)
     const TARGET_WINNER_INDEX = 144;
     newReel[TARGET_WINNER_INDEX] = chosenWinner;
 
-    // Fill all other slots (4 to 159) sequentially from shuffled pool (zero duplicate names in 10-item window)
+    // Fill all other slots (9 to 159) sequentially from shuffled pool (zero duplicate names in 10-item window)
     const winnerPos = shuffledPool.findIndex((p) => p.id === chosenWinner.id);
     const validWinnerPos = winnerPos >= 0 ? winnerPos : 0;
-    for (let i = 4; i < 160; i++) {
+    for (let i = 9; i < 160; i++) {
       if (i === TARGET_WINNER_INDEX) continue;
       const offset = TARGET_WINNER_INDEX - i;
       const pos = ((validWinnerPos - offset) % shuffledPool.length + shuffledPool.length * 1000) % shuffledPool.length;
@@ -823,6 +996,8 @@ const App = () => {
       setIsTimerRunning(false);
       setIsDisqualified(false);
       playSound("win");
+
+      sendRemoteAction("SPIN_WIN", { winnerData: chosenWinner });
 
       // Submit winner result to local API database
       if (chosenWinner.id) {
@@ -863,6 +1038,7 @@ const App = () => {
   };
 
   const closeWinnerModal = async () => {
+    sendRemoteAction("CLOSE_WINNER");
     setWinner(false);
     setWinnerData(null);
     setIsTimerRunning(false);
@@ -874,16 +1050,19 @@ const App = () => {
 
   const startTimer = () => {
     if (countdown > 0) {
+      sendRemoteAction("START_TIMER");
       setIsTimerRunning(true);
       playSound("beep");
     }
   };
 
   const stopTimer = () => {
+    sendRemoteAction("STOP_TIMER");
     setIsTimerRunning(false);
   };
 
   const resetTimer = () => {
+    sendRemoteAction("RESET_TIMER");
     setIsTimerRunning(false);
     setCountdown(10);
     setIsDisqualified(false);
@@ -988,19 +1167,30 @@ const App = () => {
 
         <div className="view-switcher">
           <button
-            className={`view-tab-btn ${viewMode === "spin" ? "active" : ""}`}
+            className={`view-tab-btn ${appMode === "display" || (appMode !== "controller" && viewMode === "spin") ? "active" : ""}`}
             onClick={() => {
+              setAppMode("display");
               setViewMode("spin");
-              window.location.hash = "spin";
+              window.history.pushState({}, "", "?mode=display");
             }}
           >
             📺 Tampilan Videotron
           </button>
           <button
-            className={`view-tab-btn ${viewMode === "mc" ? "active" : ""}`}
+            className={`view-tab-btn ${appMode === "controller" ? "active" : ""}`}
             onClick={() => {
+              setAppMode("controller");
+              window.history.pushState({}, "", "?mode=controller");
+            }}
+          >
+            🎮 Remote Controller (Komputer A)
+          </button>
+          <button
+            className={`view-tab-btn ${appMode === "mc" || viewMode === "mc" ? "active" : ""}`}
+            onClick={() => {
+              setAppMode("mc");
               setViewMode("mc");
-              window.location.hash = "mc";
+              window.history.pushState({}, "", "?mode=mc#mc");
             }}
           >
             🎤 Mode MC / Presenter
@@ -1033,8 +1223,12 @@ const App = () => {
           </button>
 
           <div className="live-indicator">
-            <span className="pulse-dot"></span>
-            <span>{viewMode === "mc" ? "LIVE AUTO-SYNC API (2.5s)" : "ONLINE API"}</span>
+            <span className={`pulse-dot ${socketConnected ? "green" : "red"}`}></span>
+            <span>
+              {socketConnected
+                ? `LAN SOCKET OK (${socketClients.display} Display)`
+                : "OFFLINE / SINGLE"}
+            </span>
           </div>
         </div>
       </nav>
@@ -1047,12 +1241,161 @@ const App = () => {
       )}
 
       {/* Confetti Celebration */}
-      {winner && viewMode === "spin" && <Confetti />}
+      {winner && (viewMode === "spin" || appMode === "display") && <Confetti />}
 
       {/* ============================================================
-         VIEW MODE: MC / PRESENTER DASHBOARD
+         VIEW MODE: REMOTE CONTROLLER DASHBOARD (KOMPUTER A)
          ============================================================ */}
-      {viewMode === "mc" ? (
+      {appMode === "controller" ? (
+        <div className="controller-container animate-fade-in" style={{ padding: "20px", maxWidth: "1200px", margin: "0 auto" }}>
+          {/* Header Banner */}
+          <div style={{ background: "#1a1a1a", color: "#fff", padding: "16px 24px", borderRadius: "12px", border: "3px solid #1a1a1a", boxShadow: "4px 4px 0px #1a1a1a", marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: "1.4rem", color: "var(--color-yellow)" }}>🎮 REMOTE CONTROLLER (KOMPUTER A)</h2>
+              <p style={{ margin: "4px 0 0 0", fontSize: "0.9rem", color: "#bbb" }}>Operator Tombol Pengacak Doorprize Panggung</p>
+            </div>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <span style={{ padding: "6px 12px", borderRadius: "20px", fontSize: "0.85rem", fontWeight: "800", background: socketConnected ? "rgba(76, 175, 80, 0.2)" : "rgba(239, 83, 80, 0.2)", color: socketConnected ? "#4caf50" : "#ef5350", border: socketConnected ? "1px solid #4caf50" : "1px solid #ef5350" }}>
+                {socketConnected ? "🟢 Socket LAN Active" : "🔴 Disconnected"}
+              </span>
+              <span style={{ padding: "6px 12px", borderRadius: "20px", fontSize: "0.85rem", fontWeight: "800", background: "rgba(33, 150, 243, 0.2)", color: "#2196f3", border: "1px solid #2196f3" }}>
+                📺 Layar Display: {socketClients.display} Online
+              </span>
+            </div>
+          </div>
+
+          {/* Grid Layout */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
+            {/* Left Card: Big Spin Control */}
+            <div style={{ background: "#fff", padding: "24px", borderRadius: "16px", border: "3px solid #1a1a1a", boxShadow: "6px 6px 0px #1a1a1a", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <div>
+                <h3 style={{ fontSize: "1.2rem", fontWeight: "900", marginBottom: "12px", borderBottom: "2px dashed #1a1a1a", paddingBottom: "8px" }}>
+                  1. KONTROL UTAMA TOMBOL ACAK
+                </h3>
+                <div style={{ background: "var(--bg-warm)", border: "2px solid #1a1a1a", padding: "12px", borderRadius: "8px", marginBottom: "16px" }}>
+                  <div style={{ fontSize: "0.8rem", fontWeight: "800", color: "#666" }}>HADIAH TERPILIH DI PANGGUNG:</div>
+                  <div style={{ fontSize: "1.2rem", fontWeight: "900", color: "var(--color-orange)", marginTop: "4px" }}>
+                    {selectedPrizeObj ? `🎁 ${selectedPrizeObj.name.toUpperCase()} (Sisa: ${selectedPrizeObj.remaining_quota}/${selectedPrizeObj.total_quota})` : "⚠️ BELUM MEMILIH HADIAH"}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                disabled={rolling}
+                onClick={() => startDraw(false)}
+                style={{
+                  width: "100%",
+                  padding: "24px 16px",
+                  fontSize: "1.4rem",
+                  fontWeight: "900",
+                  color: "#fff",
+                  background: rolling ? "#9e9e9e" : isPrizeQuotaExhausted ? "linear-gradient(135deg, #e67e22, #d35400)" : "linear-gradient(135deg, #f5a623, #ff5722)",
+                  border: "3px solid #1a1a1a",
+                  borderRadius: "12px",
+                  boxShadow: rolling ? "none" : "4px 4px 0px #1a1a1a",
+                  cursor: rolling ? "not-allowed" : "pointer",
+                  transition: "transform 0.1s, boxShadow 0.1s",
+                  marginTop: "16px"
+                }}
+              >
+                {rolling ? "🎰 SEDANG MENGACAK DI PANGGUNG..." : "🎲 ACAK PEMENANG DI PANGGUNG"}
+              </button>
+            </div>
+
+            {/* Right Card: Prize Picker Grid */}
+            <div style={{ background: "#fff", padding: "24px", borderRadius: "16px", border: "3px solid #1a1a1a", boxShadow: "6px 6px 0px #1a1a1a" }}>
+              <h3 style={{ fontSize: "1.2rem", fontWeight: "900", marginBottom: "12px", borderBottom: "2px dashed #1a1a1a", paddingBottom: "8px" }}>
+                2. PILIH HADIAH UNDIAN
+              </h3>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px", maxHeight: "320px", overflowY: "auto" }}>
+                {prizesList.map((p, idx) => {
+                  const isSelected = String(p.id) === String(selectedPrizeId);
+                  const isZero = p.remaining_quota <= 0;
+                  return (
+                    <button
+                      key={p.id}
+                      disabled={rolling || isZero}
+                      onClick={() => selectPrizeDirect(p)}
+                      style={{
+                        padding: "12px 16px",
+                        borderRadius: "10px",
+                        border: isSelected ? "3px solid #1a1a1a" : "2px solid #ddd",
+                        background: isSelected ? "var(--color-orange-light)" : isZero ? "#f5f5f5" : "#fff",
+                        color: isZero ? "#aaa" : "#1a1a1a",
+                        fontWeight: "800",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        cursor: rolling || isZero ? "not-allowed" : "pointer",
+                        boxShadow: isSelected ? "3px 3px 0px #1a1a1a" : "none"
+                      }}
+                    >
+                      <span>#{idx + 1} 🎁 {p.name}</span>
+                      <span style={{ fontSize: "0.85rem", padding: "4px 8px", borderRadius: "6px", background: isZero ? "#e0e0e0" : "var(--color-yellow)", border: "1px solid #1a1a1a" }}>
+                        {isZero ? "HABIS" : `Sisa: ${p.remaining_quota}`}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Active Winner Control Panel */}
+          {winner && winnerData && (
+            <div style={{ background: "#fff", padding: "24px", borderRadius: "16px", border: "3px solid #1a1a1a", boxShadow: "6px 6px 0px #1a1a1a", marginTop: "20px" }}>
+              <h3 style={{ fontSize: "1.2rem", fontWeight: "900", color: "#1a1a1a", borderBottom: "2px dashed #1a1a1a", paddingBottom: "8px", marginBottom: "16px" }}>
+                🏆 PEMENANG TERPILIH DI LAYAR PANGGUNG
+              </h3>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px" }}>
+                <div>
+                  <h2 style={{ fontSize: "1.6rem", fontWeight: "900", color: "#1a1a1a", margin: 0 }}>{winnerData.nama}</h2>
+                  <p style={{ margin: "6px 0", fontSize: "1.05rem", fontWeight: "700" }}>🏛️ {winnerData.instansi}</p>
+                  <p style={{ margin: "6px 0", fontSize: "1rem", fontWeight: "800", color: "var(--color-orange)" }}>📞 {maskPhoneNumber(winnerData.phone || winnerData.telp)}</p>
+                  <p style={{ margin: "6px 0", fontSize: "1.1rem", fontWeight: "900", color: "var(--color-green)" }}>🎁 Hadiah: {prize}</p>
+                </div>
+
+                <div style={{ background: "var(--bg-warm)", border: "2px solid #1a1a1a", padding: "16px", borderRadius: "12px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                    <span style={{ fontWeight: "800" }}>⏱️ Timer Pemanggilan:</span>
+                    <span style={{ fontSize: "1.8rem", fontWeight: "900", color: countdown <= 3 ? "#ef5350" : "#1a1a1a" }}>{countdown}s</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    {!isTimerRunning ? (
+                      <button onClick={startTimer} style={{ flex: 1, padding: "10px", fontWeight: "800", background: "var(--color-green)", color: "#fff", border: "2px solid #1a1a1a", borderRadius: "8px", cursor: "pointer" }}>
+                        ▶️ Start Timer (10s)
+                      </button>
+                    ) : (
+                      <button onClick={stopTimer} style={{ flex: 1, padding: "10px", fontWeight: "800", background: "var(--color-orange)", color: "#fff", border: "2px solid #1a1a1a", borderRadius: "8px", cursor: "pointer" }}>
+                        ⏸️ Pause Timer
+                      </button>
+                    )}
+                    <button onClick={resetTimer} style={{ padding: "10px", fontWeight: "800", background: "#fff", border: "2px solid #1a1a1a", borderRadius: "8px", cursor: "pointer" }}>
+                      🔄 Reset
+                    </button>
+                    <button onClick={closeWinnerModal} style={{ width: "100%", padding: "10px", fontWeight: "800", background: "#1a1a1a", color: "#fff", border: "2px solid #1a1a1a", borderRadius: "8px", cursor: "pointer", marginTop: "4px" }}>
+                      ✅ Tutup Modal (Panggung)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Quick Shortcuts */}
+          <div style={{ marginTop: "20px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <a href="?mode=display" target="_blank" rel="noreferrer" style={{ padding: "10px 16px", borderRadius: "8px", background: "var(--color-blue)", color: "#fff", textDecoration: "none", fontWeight: "800", border: "2px solid #1a1a1a" }}>
+              📺 Buka Display Panggung (Tab Baru)
+            </a>
+            <button onClick={() => setShowSearchModal(true)} style={{ padding: "10px 16px", borderRadius: "8px", background: "#fff", color: "#1a1a1a", fontWeight: "800", border: "2px solid #1a1a1a", cursor: "pointer" }}>
+              🔍 Cek Status Peserta
+            </button>
+            <button onClick={resetLottery} style={{ padding: "10px 16px", borderRadius: "8px", background: "var(--color-red-light)", color: "var(--color-red)", fontWeight: "800", border: "2px solid var(--color-red)", cursor: "pointer" }}>
+              ⚠️ Reset Data Undian
+            </button>
+          </div>
+        </div>
+      ) : viewMode === "mc" ? (
         <div className="mc-container animate-fade-in">
           {/* Spotlight Banner: Latest Winner */}
           {pastWinners.length > 0 && (
