@@ -1285,14 +1285,14 @@ const App = () => {
                 onClick={() => startDraw(false)}
                 style={{
                   width: "100%",
-                  padding: "24px 16px",
-                  fontSize: "1.4rem",
+                  padding: "28px 20px",
+                  fontSize: "1.6rem",
                   fontWeight: "900",
                   color: "#fff",
                   background: rolling ? "#9e9e9e" : isPrizeQuotaExhausted ? "linear-gradient(135deg, #e67e22, #d35400)" : "linear-gradient(135deg, #f5a623, #ff5722)",
-                  border: "3px solid #1a1a1a",
-                  borderRadius: "12px",
-                  boxShadow: rolling ? "none" : "4px 4px 0px #1a1a1a",
+                  border: "4px solid #1a1a1a",
+                  borderRadius: "16px",
+                  boxShadow: rolling ? "none" : "6px 6px 0px #1a1a1a",
                   cursor: rolling ? "not-allowed" : "pointer",
                   transition: "transform 0.1s, boxShadow 0.1s",
                   marginTop: "16px"
