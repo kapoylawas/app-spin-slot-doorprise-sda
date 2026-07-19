@@ -1420,6 +1420,42 @@ body {
   font-weight: 900;
 }
 
+.top-nav-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-fullscreen-toggle {
+  font-family: var(--font-primary);
+  font-size: 0.85rem;
+  font-weight: 800;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 2px solid #555;
+  background: #2a2a2a;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-fullscreen-toggle:hover {
+  background: var(--color-orange);
+  color: #1a1a1a;
+  border-color: var(--color-orange);
+  transform: translateY(-1px);
+}
+
+.btn-fullscreen-toggle.is-active {
+  background: var(--color-yellow);
+  color: #1a1a1a;
+  border-color: var(--color-yellow);
+}
+
 .live-indicator {
   display: flex;
   align-items: center;
@@ -1944,4 +1980,226 @@ body {
   background: #d32f2f;
   transform: translate(-1px, -1px);
   box-shadow: 4px 4px 0px #1a1a1a;
+}
+
+/* ============================================================
+   VIDEOTRON & FULLSCREEN SINGLE-SCREEN LAYOUT (ZERO OUTSIDE SCROLLING)
+   ============================================================ */
+
+.lucky-draw-root.videotron-mode,
+.lucky-draw-root.is-fullscreen {
+  height: 100vh;
+  max-height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+.lucky-draw-root.videotron-mode .top-nav-tabs,
+.lucky-draw-root.is-fullscreen .top-nav-tabs {
+  flex-shrink: 0;
+  padding: 8px 24px;
+}
+
+.lucky-draw-root.videotron-mode .lucky-draw-container.wide-layout,
+.lucky-draw-root.is-fullscreen .lucky-draw-container.wide-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 20px 14px 20px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.lucky-draw-root.videotron-mode .lucky-draw-header,
+.lucky-draw-root.is-fullscreen .lucky-draw-header {
+  padding: 4px 0 6px 0;
+  flex-shrink: 0;
+}
+
+.lucky-draw-root.videotron-mode .logo-wrapper,
+.lucky-draw-root.is-fullscreen .logo-wrapper {
+  padding: 0;
+  margin-bottom: 2px;
+}
+
+.lucky-draw-root.videotron-mode .sidoarjo-logo,
+.lucky-draw-root.is-fullscreen .sidoarjo-logo {
+  height: 52px;
+}
+
+.lucky-draw-root.videotron-mode .main-title,
+.lucky-draw-root.is-fullscreen .main-title {
+  font-size: 1.7rem;
+  margin-bottom: 0px;
+  line-height: 1.1;
+}
+
+.lucky-draw-root.videotron-mode .subtitle,
+.lucky-draw-root.is-fullscreen .subtitle {
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+
+.lucky-draw-root.videotron-mode .stats-dashboard,
+.lucky-draw-root.is-fullscreen .stats-dashboard {
+  margin: 0 0 8px 0;
+  flex-shrink: 0;
+}
+
+.lucky-draw-root.videotron-mode .stat-card,
+.lucky-draw-root.is-fullscreen .stat-card {
+  padding: 6px 12px;
+}
+
+.lucky-draw-root.videotron-mode .stat-label,
+.lucky-draw-root.is-fullscreen .stat-label {
+  font-size: 0.68rem;
+  margin-bottom: 2px;
+}
+
+.lucky-draw-root.videotron-mode .stat-value,
+.lucky-draw-root.is-fullscreen .stat-value {
+  font-size: 1.05rem;
+}
+
+.lucky-draw-root.videotron-mode .videotron-grid-layout,
+.lucky-draw-root.is-fullscreen .videotron-grid-layout {
+  flex: 1;
+  min-height: 0;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.lucky-draw-root.videotron-mode .videotron-col-left,
+.lucky-draw-root.is-fullscreen .videotron-col-left {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.lucky-draw-root.videotron-mode .prize-selection-panel,
+.lucky-draw-root.is-fullscreen .prize-selection-panel {
+  padding: 10px 14px;
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.lucky-draw-root.videotron-mode .card-header-icon,
+.lucky-draw-root.is-fullscreen .card-header-icon {
+  font-size: 1.4rem;
+  margin-bottom: 2px;
+}
+
+.lucky-draw-root.videotron-mode .panel-title,
+.lucky-draw-root.is-fullscreen .panel-title {
+  font-size: 0.88rem;
+  margin-bottom: 4px;
+}
+
+.lucky-draw-root.videotron-mode .custom-dropdown,
+.lucky-draw-root.is-fullscreen .custom-dropdown {
+  padding: 6px 36px 6px 12px;
+  font-size: 0.88rem;
+}
+
+.lucky-draw-root.videotron-mode .slot-machine-panel,
+.lucky-draw-root.is-fullscreen .slot-machine-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 14px;
+  margin-bottom: 0;
+  justify-content: space-between;
+}
+
+.lucky-draw-root.videotron-mode .slot-machine-console,
+.lucky-draw-root.is-fullscreen .slot-machine-console {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lucky-draw-root.videotron-mode .console-controls,
+.lucky-draw-root.is-fullscreen .console-controls {
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+
+.lucky-draw-root.videotron-mode .videotron-col-right,
+.lucky-draw-root.is-fullscreen .videotron-col-right {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.lucky-draw-root.videotron-mode .past-winners-log,
+.lucky-draw-root.is-fullscreen .past-winners-log {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.lucky-draw-root.videotron-mode .log-panel-card,
+.lucky-draw-root.is-fullscreen .log-panel-card {
+  height: 100%;
+  min-height: 0;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.lucky-draw-root.videotron-mode .log-header,
+.lucky-draw-root.is-fullscreen .log-header {
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.lucky-draw-root.videotron-mode .log-table-container,
+.lucky-draw-root.is-fullscreen .log-table-container {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Media Query scaling for smaller heights (e.g. 768p displays) */
+@media (max-height: 820px) {
+  .lucky-draw-root.videotron-mode .sidoarjo-logo,
+  .lucky-draw-root.is-fullscreen .sidoarjo-logo {
+    height: 42px;
+  }
+  .lucky-draw-root.videotron-mode .main-title,
+  .lucky-draw-root.is-fullscreen .main-title {
+    font-size: 1.4rem;
+  }
+  .lucky-draw-root.videotron-mode .subtitle,
+  .lucky-draw-root.is-fullscreen .subtitle {
+    display: none;
+  }
+  .lucky-draw-root.videotron-mode .card-header-icon,
+  .lucky-draw-root.is-fullscreen .card-header-icon {
+    display: none;
+  }
+  .lucky-draw-root.videotron-mode .prize-selection-panel,
+  .lucky-draw-root.is-fullscreen .prize-selection-panel {
+    padding: 6px 12px;
+  }
+  .lucky-draw-root.videotron-mode .slot-machine-panel,
+  .lucky-draw-root.is-fullscreen .slot-machine-panel {
+    padding: 6px 12px;
+  }
 }

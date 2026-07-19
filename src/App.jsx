@@ -123,6 +123,61 @@ const App = () => {
   const [selectedPrizeId, setSelectedPrizeId] = useState("");
   const [prize, setPrize] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(
+        !!(
+          document.fullscreenElement ||
+          document.webkitFullscreenElement ||
+          document.mozFullScreenElement ||
+          document.msFullscreenElement
+        )
+      );
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+    document.addEventListener("mozfullscreenchange", handleFullscreenChange);
+    document.addEventListener("MSFullscreenChange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
+      document.removeEventListener("mozfullscreenchange", handleFullscreenChange);
+      document.removeEventListener("MSFullscreenChange", handleFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    const isFS = !!(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
+      document.msFullscreenElement
+    );
+    if (!isFS) {
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen().catch((err) => console.error("Fullscreen error:", err));
+      } else if (elem.webkitRequestFullscreen) {
+        elem.webkitRequestFullscreen();
+      } else if (elem.mozRequestFullScreen) {
+        elem.mozRequestFullScreen();
+      } else if (elem.msRequestFullscreen) {
+        elem.msRequestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch((err) => console.error("Exit Fullscreen error:", err));
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      } else if (document.mozCancelFullScreen) {
+        document.mozCancelFullScreen();
+      } else if (document.msExitFullscreen) {
+        document.msExitFullscreen();
+      }
+    }
+  };
 
   // View navigation state ('spin' or 'mc')
   const [viewMode, setViewMode] = useState(() => {
@@ -242,6 +297,13 @@ const App = () => {
         return;
       }
 
+      // Toggle Fullscreen with 'f' or 'F' key
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        toggleFullscreen();
+        return;
+      }
+
       // Fast prize selection with number keys 1-9
       if (/^[1-9]$/.test(e.key)) {
         if (viewMode === "spin" && !rolling && !winner && !showResetModal && !cancelTargetWinner) {
@@ -293,9 +355,11 @@ const App = () => {
         if (fetchedParticipants.length > 0) {
           const eligible = fetchedParticipants.filter((p) => !p.status_peserta);
           const seedPool = eligible.length > 0 ? eligible : fetchedParticipants;
+          // Randomly shuffle seed pool so idle wheel displays names sampled across all participants
+          const shuffledSeed = [...seedPool].sort(() => 0.5 - Math.random());
           let displayItems = [];
           while (displayItems.length < 10) {
-            displayItems = displayItems.concat(seedPool);
+            displayItems = displayItems.concat(shuffledSeed);
           }
           setReelItems(displayItems.slice(0, 10));
         } else {
@@ -707,7 +771,7 @@ const App = () => {
   });
 
   return (
-    <div className="lucky-draw-root">
+    <div className={`lucky-draw-root ${viewMode === "spin" ? "videotron-mode" : "mc-mode"} ${isFullscreen ? "is-fullscreen" : ""}`}>
 
       {/* Top Header Navigation Bar with View Switcher */}
       <nav className="top-nav-tabs">
@@ -737,9 +801,19 @@ const App = () => {
           </button>
         </div>
 
-        <div className="live-indicator">
-          <span className="pulse-dot"></span>
-          <span>{viewMode === "mc" ? "LIVE AUTO-SYNC API (2.5s)" : "ONLINE API"}</span>
+        <div className="top-nav-right-actions">
+          <button
+            className={`btn-fullscreen-toggle ${isFullscreen ? "is-active" : ""}`}
+            onClick={toggleFullscreen}
+            title="Toggle Mode Fullscreen / Layar Penuh (Tekan 'F')"
+          >
+            {isFullscreen ? "↙ Keluar Fullscreen" : "⛶ Mode Fullscreen (F)"}
+          </button>
+
+          <div className="live-indicator">
+            <span className="pulse-dot"></span>
+            <span>{viewMode === "mc" ? "LIVE AUTO-SYNC API (2.5s)" : "ONLINE API"}</span>
+          </div>
         </div>
       </nav>
 
@@ -984,14 +1058,17 @@ const App = () => {
                     </select>
                   </div>
                   <div style={{ fontSize: "0.78rem", fontWeight: "700", color: "#666", marginTop: "8px", textAlign: "center" }}>
-                    💡 Tip Keyboard: Tekan <strong>Panah Atas (↑) / Bawah (↓)</strong> atau <strong>Angka 1 - 9</strong> untuk ganti hadiah
+                    💡 Tip Keyboard: Tekan <strong>Panah (↑/↓)</strong> / <strong>Angka (1-9)</strong> ganti hadiah | <strong>F</strong> Fullscreen | <strong>SPACE/ENTER</strong> acak
                   </div>
                 </div>
               </section>
 
               {/* Slot Machine Area */}
               <section className="slot-machine-panel">
-                <h3 className="panel-title text-center mb-3">Langkah 2: Putar Roda Keberuntungan</h3>
+                <h3 className="panel-title text-center mb-1">Langkah 2: Putar Roda Keberuntungan</h3>
+                <div style={{ fontSize: "0.82rem", fontWeight: "800", color: "var(--color-orange)", textAlign: "center", marginBottom: "12px" }}>
+                  🎯 Total Peserta Siap Diundi: <strong>{eligibleCount.toLocaleString("id-ID")} Orang</strong> (100% Diacak Kriptografik)
+                </div>
 
                 <div className="slot-machine-console">
                   <div className={`console-neon-bar left ${rolling ? "rolling" : ""}`}></div>
