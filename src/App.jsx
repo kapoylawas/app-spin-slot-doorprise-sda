@@ -1075,20 +1075,20 @@ const App = () => {
                           key={idx}
                           className={isLatest ? "latest-winner-row" : ""}
                         >
-                          <td>{filteredMcWinners.length - idx}</td>
-                          <td>{w.drawTime}</td>
-                          <td style={{ color: "#1a1a1a", fontSize: "1.05rem", fontWeight: "800" }}>
+                          <td data-label="No">{filteredMcWinners.length - idx}</td>
+                          <td data-label="Waktu">{w.drawTime}</td>
+                          <td data-label="Nama Pemenang" style={{ color: "#1a1a1a", fontSize: "1.05rem", fontWeight: "800" }}>
                             {w.nama} {isLatest && <span style={{ fontSize: "0.8rem", color: "var(--color-orange)", marginLeft: "6px" }}>(Terbaru)</span>}
                           </td>
-                          <td style={{ fontWeight: "800", letterSpacing: "0.5px", color: "var(--text-dark)" }}>
+                          <td data-label="NIK (Lengkap)" style={{ fontWeight: "800", letterSpacing: "0.5px", color: "var(--text-dark)" }}>
                             {w.nik !== "-" ? w.nik : "-"}
                           </td>
-                          <td>{w.instansi || "Peserta"}</td>
-                          <td style={{ fontWeight: "800", color: "#1a1a1a" }}>
+                          <td data-label="Kota / Kabupaten">{w.instansi || "Peserta"}</td>
+                          <td data-label="No. Telepon (Lengkap)" style={{ fontWeight: "800", color: "#1a1a1a" }}>
                             {w.phone || "-"}
                           </td>
-                          <td>🎁 {w.prize ? w.prize.toUpperCase() : "-"}</td>
-                          <td>
+                          <td data-label="Hadiah">🎁 {w.prize ? w.prize.toUpperCase() : "-"}</td>
+                          <td data-label="Status & Aksi">
                             {w.isDisqualified || w.statusText === "HANGUS" ? (
                               <span className="status-pill fail">❌ HANGUS</span>
                             ) : (
@@ -1300,11 +1300,11 @@ const App = () => {
                             const isFail = w.isDisqualified || w.statusText === "HANGUS" || w.statusText === "GUGUR";
                             return (
                               <tr key={idx} className={`winner-row-entry ${isFail ? "is-gugur" : ""}`}>
-                                <td className="col-time">{w.drawTime}</td>
-                                <td className="col-name">{w.nama}</td>
-                                <td className="col-instansi">{w.instansi || "Peserta"}</td>
-                                <td className="col-prize">🎁 {w.prize && w.prize !== "-" ? w.prize.toUpperCase() : "-"}</td>
-                                <td className="col-status">
+                                <td data-label="Waktu" className="col-time">{w.drawTime}</td>
+                                <td data-label="Nama Pemenang" className="col-name">{w.nama}</td>
+                                <td data-label="Kota / Kabupaten" className="col-instansi">{w.instansi || "Peserta"}</td>
+                                <td data-label="Hadiah" className="col-prize">🎁 {w.prize && w.prize !== "-" ? w.prize.toUpperCase() : "-"}</td>
+                                <td data-label="Status" className="col-status">
                                   {isFail ? (
                                     <span className="status-pill fail">❌ HANGUS</span>
                                   ) : (
