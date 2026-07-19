@@ -34,10 +34,28 @@ const DUMMY_PRIZES = [
   { id: 3, name: "Sepeda Listrik", description: "E-bike", remaining_quota: 1, total_quota: 1 },
 ];
 
+// Singleton Web Audio API Context (Reused across all sound calls to prevent browser AudioContext limits)
+let globalAudioCtx = null;
+
+const getAudioContext = () => {
+  if (!globalAudioCtx) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+      globalAudioCtx = new AudioContextClass();
+    }
+  }
+  if (globalAudioCtx && globalAudioCtx.state === "suspended") {
+    globalAudioCtx.resume().catch(() => {});
+  }
+  return globalAudioCtx;
+};
+
 // Helper to play synthesized sounds using Web Audio API
 const playSound = (type) => {
   try {
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const audioCtx = getAudioContext();
+    if (!audioCtx) return;
+
     if (type === "tick") {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
