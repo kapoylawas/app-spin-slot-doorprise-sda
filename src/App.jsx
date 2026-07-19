@@ -198,6 +198,64 @@ const App = () => {
   const [toastMessage, setToastMessage] = useState("⚠️ Silakan pilih hadiah terlebih dahulu sebelum mengacak!");
   const [showResetModal, setShowResetModal] = useState(false);
   const [cancelTargetWinner, setCancelTargetWinner] = useState(null);
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [participantSearchQuery, setParticipantSearchQuery] = useState("");
+
+  const filteredParticipantsSearch = React.useMemo(() => {
+    if (!participantSearchQuery.trim()) return [];
+    const q = participantSearchQuery.toLowerCase().trim();
+
+    // 1. Search in eligible candidates (names)
+    const eligibleMatches = names
+      .filter((p) => !p.status_peserta)
+      .filter(
+        (p) =>
+          (p.nama && p.nama.toLowerCase().includes(q)) ||
+          (p.instansi && p.instansi.toLowerCase().includes(q)) ||
+          (p.telp && p.telp.includes(q)) ||
+          (p.nik && String(p.nik).includes(q))
+      )
+      .map((p) => ({
+        id: p.id,
+        nama: p.nama,
+        nik: p.nik ? String(p.nik) : "-",
+        instansi: p.instansi || "Peserta",
+        phone: p.telp || "-",
+        statusType: "eligible",
+        statusBadge: "🟢 SIAP DIUNDI (Ada Dalam Daftar Spinner)",
+      }));
+
+    // 2. Search in past winners (pastWinners)
+    const winnerMatches = pastWinners
+      .filter(
+        (w) =>
+          (w.nama && w.nama.toLowerCase().includes(q)) ||
+          (w.instansi && w.instansi.toLowerCase().includes(q)) ||
+          (w.phone && w.phone.includes(q)) ||
+          (w.nik && String(w.nik).includes(q))
+      )
+      .map((w) => ({
+        id: w.id,
+        nama: w.nama,
+        nik: w.nik || "-",
+        instansi: w.instansi || "Peserta",
+        phone: w.phone || "-",
+        statusType: w.isDisqualified || w.statusText === "HANGUS" ? "hangus" : "winner",
+        statusBadge: w.isDisqualified || w.statusText === "HANGUS" ? "❌ GUGUR / HANGUS" : `🏆 PEMENANG SAH (🎁 ${w.prize?.toUpperCase() || "-"})`,
+      }));
+
+    const seen = new Set();
+    const results = [];
+    [...eligibleMatches, ...winnerMatches].forEach((item) => {
+      const key = `${item.id}-${item.statusType}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push(item);
+      }
+    });
+
+    return results;
+  }, [participantSearchQuery, names, pastWinners]);
 
   // Timer states for caller countdown (10s)
   const [countdown, setCountdown] = useState(10);
@@ -267,6 +325,10 @@ const App = () => {
 
       // Close modal on Escape
       if (e.key === "Escape") {
+        if (showSearchModal) {
+          setShowSearchModal(false);
+          return;
+        }
         if (winner) {
           closeWinnerModal();
           return;
@@ -312,12 +374,30 @@ const App = () => {
         return;
       }
 
+      // Key controls when winner modal is open (Timer & Modal navigation)
+      if (winner) {
+        if (e.key === "t" || e.key === "T") {
+          e.preventDefault();
+          if (isTimerRunning) {
+            stopTimer();
+          } else if (countdown > 0) {
+            startTimer();
+          }
+          return;
+        }
+        if (e.key === "r" || e.key === "R") {
+          e.preventDefault();
+          resetTimer();
+          return;
+        }
+      }
+
       // Trigger draw (or close winner modal) on Space, Enter, PageDown, ArrowRight (supported by keyboard & presenter clickers)
       if (["Space", " ", "Enter", "NumpadEnter", "PageDown", "ArrowRight"].includes(e.key)) {
         e.preventDefault();
 
         if (winner) {
-          // If winner announcement modal is currently open, pressing key closes it so MC can draw next winner
+          // Pressing Space/Enter/Presenter Clicker closes winner modal
           closeWinnerModal();
         } else if (viewMode === "spin" && !rolling && !showResetModal && !cancelTargetWinner) {
           if (startDrawRef.current) {
@@ -329,7 +409,7 @@ const App = () => {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [winner, viewMode, rolling, showResetModal, cancelTargetWinner, selectedPrizeId, prizesList]);
+  }, [winner, viewMode, rolling, showResetModal, cancelTargetWinner, selectedPrizeId, prizesList, isTimerRunning, countdown, isDisqualified]);
 
   // Fetch data from local API (isSilent = true for background polling without UI flickering)
   const fetchData = async (isSilent = false) => {
@@ -372,11 +452,7 @@ const App = () => {
         setTransitionStyle("none");
       }
 
-      // 2. Process Prizes Data
-      const fetchedPrizes = prizesRes.data?.data || [];
-      setPrizesList(fetchedPrizes);
-
-      // 3. Process Results Data (Draw History)
+      // 2. Process Results Data (Draw History)
       const fetchedResults = (resultsRes.data?.data || []).map((r) => ({
         id: r.participant_id,
         prizeId: r.prize_id,
@@ -395,6 +471,24 @@ const App = () => {
         statusText: r.result_type === "menang" ? "SAH" : "HANGUS",
       }));
       setPastWinners(fetchedResults);
+
+      // 3. Process Prizes Data & recalculate remaining_quota
+      // Only SAH ('menang') results consume prize quota!
+      // 'HANGUS' results do NOT consume quota, allowing replacement draws for unclaimed prizes.
+      const rawPrizes = prizesRes.data?.data || [];
+      const processedPrizes = rawPrizes.map((p) => {
+        const sahCount = fetchedResults.filter(
+          (r) => Number(r.prizeId) === Number(p.id) && r.statusText === "SAH"
+        ).length;
+        const totalQuota = p.total_quota !== undefined ? Number(p.total_quota) : Number(p.remaining_quota) + sahCount;
+        const remainingQuota = Math.max(0, totalQuota - sahCount);
+        return {
+          ...p,
+          total_quota: totalQuota,
+          remaining_quota: remainingQuota,
+        };
+      });
+      setPrizesList(processedPrizes);
 
     } catch (error) {
       console.error("Error fetching data from local API, using fallback data:", error);
@@ -803,6 +897,14 @@ const App = () => {
 
         <div className="top-nav-right-actions">
           <button
+            className="btn-search-participant-toggle"
+            onClick={() => setShowSearchModal(true)}
+            title="Cari & Cek Status Peserta (Apakah Masuk Daftar / Dikembalikan)"
+          >
+            🔍 Cek Status Peserta
+          </button>
+
+          <button
             className={`btn-fullscreen-toggle ${isFullscreen ? "is-active" : ""}`}
             onClick={toggleFullscreen}
             title="Toggle Mode Fullscreen / Layar Penuh (Tekan 'F')"
@@ -1065,10 +1167,7 @@ const App = () => {
 
               {/* Slot Machine Area */}
               <section className="slot-machine-panel">
-                <h3 className="panel-title text-center mb-1">Langkah 2: Putar Roda Keberuntungan</h3>
-                <div style={{ fontSize: "0.82rem", fontWeight: "800", color: "var(--color-orange)", textAlign: "center", marginBottom: "12px" }}>
-                  🎯 Total Peserta Siap Diundi: <strong>{eligibleCount.toLocaleString("id-ID")} Orang</strong> (100% Diacak Kriptografik)
-                </div>
+                <h3 className="panel-title text-center mb-3">Langkah 2: Putar Roda Keberuntungan</h3>
 
                 <div className="slot-machine-console">
                   <div className={`console-neon-bar left ${rolling ? "rolling" : ""}`}></div>
@@ -1263,17 +1362,17 @@ const App = () => {
                   <div className="timer-controls">
                     {!isTimerRunning && countdown > 0 && (
                       <button className="btn-timer start" onClick={startTimer}>
-                        ▶️ Mulai Hitung (10s)
+                        ▶️ Mulai Hitung (10s) <span style={{ fontSize: "0.75rem", opacity: 0.85 }}>(Tekan T / Klik)</span>
                       </button>
                     )}
                     {isTimerRunning && (
                       <button className="btn-timer stop" onClick={stopTimer}>
-                        ⏸️ Hentikan Counter (Hadir)
+                        ⏸️ Hentikan Counter (Hadir) <span style={{ fontSize: "0.75rem", opacity: 0.85 }}>(T)</span>
                       </button>
                     )}
                     {(isDisqualified || countdown < 10) && (
                       <button className="btn-timer reset" onClick={resetTimer}>
-                        🔄 Reset Timer (10s)
+                        🔄 Reset Timer (10s) <span style={{ fontSize: "0.75rem", opacity: 0.85 }}>(R)</span>
                       </button>
                     )}
                   </div>
@@ -1363,6 +1462,80 @@ const App = () => {
               >
                 Ya, Batalkan Pemenang
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Search Participant Status Modal */}
+      {showSearchModal && (
+        <div className="search-modal-overlay" onClick={() => setShowSearchModal(false)}>
+          <div className="search-modal-card animate-zoom-in" onClick={(e) => e.stopPropagation()}>
+            <div className="search-modal-header">
+              <div className="search-modal-title">
+                🔍 Cari & Cek Status Peserta Undian
+              </div>
+              <button className="search-modal-close" onClick={() => setShowSearchModal(false)}>✕</button>
+            </div>
+
+            <div className="search-modal-body">
+              <div className="search-modal-input-wrapper">
+                <input
+                  type="text"
+                  placeholder="🔍 Masukkan nama peserta, NIK, No. Telepon, atau Instansi/Kota..."
+                  value={participantSearchQuery}
+                  onChange={(e) => setParticipantSearchQuery(e.target.value)}
+                  className="search-modal-input"
+                  autoFocus
+                />
+                {participantSearchQuery && (
+                  <button className="btn-clear-search" onClick={() => setParticipantSearchQuery("")}>✕ Clear</button>
+                )}
+              </div>
+
+              <div className="search-modal-stats-bar">
+                <span>📊 Total Peserta Siap Diundi: <strong>{eligibleCount.toLocaleString("id-ID")} Orang</strong></span>
+                <span>🏆 Total Pemenang: <strong>{pastWinners.length.toLocaleString("id-ID")} Orang</strong></span>
+              </div>
+
+              <div className="search-modal-results-container">
+                {participantSearchQuery.trim() === "" ? (
+                  <div className="search-empty-prompt">
+                    💡 Ketik nama atau NIK peserta untuk mengecek apakah statusnya <strong>🟢 SIAP DIUNDI (Ada Dalam Daftar)</strong> atau telah dikembalikan.
+                  </div>
+                ) : filteredParticipantsSearch.length > 0 ? (
+                  <table className="search-results-table">
+                    <thead>
+                      <tr>
+                        <th>Nama Peserta</th>
+                        <th>NIK</th>
+                        <th>Instansi / Kota</th>
+                        <th>No. Telepon</th>
+                        <th>Status Saat Ini</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredParticipantsSearch.map((p, idx) => (
+                        <tr key={idx} className={`search-row ${p.statusType}`}>
+                          <td style={{ fontWeight: "800", color: "#1a1a1a" }}>{p.nama}</td>
+                          <td>{p.nik}</td>
+                          <td>{p.instansi}</td>
+                          <td>{p.phone}</td>
+                          <td>
+                            <span className={`status-badge-pill ${p.statusType}`}>
+                              {p.statusBadge}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="search-empty-prompt">
+                    ❌ Tidak ditemukan peserta dengan kata kunci "<strong>{participantSearchQuery}</strong>".
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
