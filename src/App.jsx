@@ -348,8 +348,8 @@ const App = () => {
     return results;
   }, [participantSearchQuery, names, pastWinners]);
 
-  // Timer states for caller countdown (10s)
-  const [countdown, setCountdown] = useState(10);
+  // Timer states for caller countdown (5s)
+  const [countdown, setCountdown] = useState(5);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [isDisqualified, setIsDisqualified] = useState(false);
 
@@ -421,20 +421,20 @@ const App = () => {
         setIsTimerRunning(false);
       } else if (data.type === "RESET_TIMER") {
         setIsTimerRunning(false);
-        setCountdown(10);
+        setCountdown(5);
         setIsDisqualified(false);
       } else if (data.type === "CLOSE_WINNER") {
         setWinner(false);
         setWinnerData(null);
         setIsTimerRunning(false);
-        setCountdown(10);
+        setCountdown(5);
         setIsDisqualified(false);
         fetchData();
       } else if (data.type === "SPIN_WIN") {
         setRolling(false);
         setWinner(true);
         setWinnerData(data.winnerData);
-        setCountdown(10);
+        setCountdown(5);
         setIsTimerRunning(false);
       }
     });
@@ -992,7 +992,7 @@ const App = () => {
       setRolling(false);
       setWinner(true);
       setWinnerData(chosenWinner);
-      setCountdown(10);
+      setCountdown(5);
       setIsTimerRunning(false);
       setIsDisqualified(false);
       playSound("win");
@@ -1042,7 +1042,7 @@ const App = () => {
     setWinner(false);
     setWinnerData(null);
     setIsTimerRunning(false);
-    setCountdown(10);
+    setCountdown(5);
     setIsDisqualified(false);
     // Re-sync with API to get fresh eligible list & prizes
     await fetchData();
@@ -1064,7 +1064,7 @@ const App = () => {
   const resetTimer = () => {
     sendRemoteAction("RESET_TIMER");
     setIsTimerRunning(false);
-    setCountdown(10);
+    setCountdown(5);
     setIsDisqualified(false);
     // Restore status back to SAH if reset before close
     setPastWinners((prevLog) => {
@@ -1363,7 +1363,7 @@ const App = () => {
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     {!isTimerRunning ? (
                       <button onClick={startTimer} style={{ flex: 1, padding: "10px", fontWeight: "800", background: "var(--color-green)", color: "#fff", border: "2px solid #1a1a1a", borderRadius: "8px", cursor: "pointer" }}>
-                        ▶️ Start Timer (10s)
+                        ▶️ Start Timer (5s)
                       </button>
                     ) : (
                       <button onClick={stopTimer} style={{ flex: 1, padding: "10px", fontWeight: "800", background: "var(--color-orange)", color: "#fff", border: "2px solid #1a1a1a", borderRadius: "8px", cursor: "pointer" }}>
@@ -1811,7 +1811,7 @@ const App = () => {
 
                 {/* Countdown Timer Calling Box */}
                 <div className="timer-caller-box">
-                  <div className="timer-display-header">⏱️ Hitung Mundur Panggilan (10 Detik)</div>
+                  <div className="timer-display-header">⏱️ Hitung Mundur Panggilan (5 Detik)</div>
                   <div className={`timer-number ${countdown <= 3 && countdown > 0 ? "urgent" : ""} ${isDisqualified ? "expired" : ""}`}>
                     {countdown} <span className="timer-unit">Detik</span>
                   </div>

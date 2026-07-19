@@ -21,7 +21,7 @@ let currentState = {
   winner: false,
   winnerData: null,
   isTimerRunning: false,
-  countdown: 10,
+  countdown: 5,
   isDisqualified: false,
   lastUpdated: Date.now(),
 };
