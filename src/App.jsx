@@ -542,14 +542,14 @@ const App = () => {
       // Navigate/cycle prize using ArrowUp / ArrowDown
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        if (viewMode === "spin" && !rolling && !winner && !showResetModal && !cancelTargetWinner) {
+        if ((viewMode === "spin" || appMode === "controller") && !rolling && !winner && !showResetModal && !cancelTargetWinner) {
           cyclePrize(-1);
         }
         return;
       }
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        if (viewMode === "spin" && !rolling && !winner && !showResetModal && !cancelTargetWinner) {
+        if ((viewMode === "spin" || appMode === "controller") && !rolling && !winner && !showResetModal && !cancelTargetWinner) {
           cyclePrize(1);
         }
         return;
@@ -564,7 +564,7 @@ const App = () => {
 
       // Fast prize selection with number keys 1-9
       if (/^[1-9]$/.test(e.key)) {
-        if (viewMode === "spin" && !rolling && !winner && !showResetModal && !cancelTargetWinner) {
+        if ((viewMode === "spin" || appMode === "controller") && !rolling && !winner && !showResetModal && !cancelTargetWinner) {
           selectPrizeByNumber(e.key);
         }
         return;
@@ -595,7 +595,7 @@ const App = () => {
         if (winner) {
           // Pressing Space/Enter/Presenter Clicker closes winner modal
           closeWinnerModal();
-        } else if (viewMode === "spin" && !rolling && !showResetModal && !cancelTargetWinner) {
+        } else if ((viewMode === "spin" || appMode === "controller") && !rolling && !showResetModal && !cancelTargetWinner) {
           if (startDrawRef.current) {
             startDrawRef.current();
           }
@@ -605,7 +605,7 @@ const App = () => {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [winner, viewMode, rolling, showResetModal, cancelTargetWinner, selectedPrizeId, prizesList, isTimerRunning, countdown, isDisqualified]);
+  }, [winner, viewMode, appMode, rolling, showResetModal, cancelTargetWinner, selectedPrizeId, prizesList, isTimerRunning, countdown, isDisqualified]);
 
   // Fetch data from local API (isSilent = true for background polling without UI flickering)
   const fetchData = async (isSilent = false) => {
@@ -1298,7 +1298,14 @@ const App = () => {
                   marginTop: "16px"
                 }}
               >
-                {rolling ? "🎰 SEDANG MENGACAK DI PANGGUNG..." : "🎲 ACAK PEMENANG DI PANGGUNG"}
+                <div>
+                  <div>{rolling ? "🎰 SEDANG MENGACAK DI PANGGUNG..." : "🎲 ACAK PEMENANG DI PANGGUNG"}</div>
+                  {!rolling && (
+                    <div style={{ fontSize: "0.75rem", fontWeight: "700", opacity: 0.9, marginTop: "4px" }}>
+                      ⌨️ Tekan SPACE / ENTER / Remote Clicker
+                    </div>
+                  )}
+                </div>
               </button>
             </div>
 
