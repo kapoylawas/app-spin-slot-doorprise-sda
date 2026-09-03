@@ -352,8 +352,8 @@ const App = () => {
   });
 
   useEffect(() => {
-    const host = window.location.hostname || "localhost";
-    const socketUrl = `http://${host}:3001`;
+    const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    const socketUrl = isLocal ? `http://${window.location.hostname}:3001` : undefined;
     const socket = io(socketUrl, {
       transports: ["websocket", "polling"],
       reconnectionAttempts: 20,
