@@ -1702,6 +1702,15 @@ body {
   color: #fff;
 }
 
+.btn-mc-action.excel {
+  background-color: #21a366;
+  color: #fff;
+}
+
+.btn-mc-action.excel:hover {
+  background-color: #198754;
+}
+
 /* MC Table Styles */
 .mc-table-panel {
   background: #ffffff;

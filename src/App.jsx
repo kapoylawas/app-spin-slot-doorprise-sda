@@ -2,13 +2,14 @@ import React, { useEffect, useState, useRef } from "react";
 import "./App.css";
 import axios from "axios";
 import { io } from "socket.io-client";
+import * as XLSX from "xlsx";
 
 const sidoarjoImage = "/sidoarjo.png";
 
 // Server API Configuration
-const API_BASE_URL = "http://10.1.18.99/api";
-// const API_BASE_URL = "http://localhost:8000/api";
-const API_TOKEN = "2|ydUqZdX4zdz68SIW6uPFAauTJUPTXfZhp3BjOEbne110bd43";
+// const API_BASE_URL = "http://10.1.18.99/api";
+const API_BASE_URL = "https://apidoorprize.sidoarjokab.go.id/api";
+const API_TOKEN = "1|TXAIpA4yt4sGcqueUUsi5cU3OP0dX3hM4J1pSeJq83a6b1a3";
 
 const getApiHeaders = () => ({
   Authorization: `Bearer ${API_TOKEN}`,
@@ -16,25 +17,7 @@ const getApiHeaders = () => ({
   "Content-Type": "application/json",
 });
 
-// Fallback data representing ASN / Employees in Sidoarjo Regency if API fails
-const DUMMY_PARTICIPANTS = [
-  { id: 1, nama: "Budi Santoso", telp: "081234567801", instansi: "Diskominfo Sidoarjo", status_peserta: null },
-  { id: 2, nama: "Siti Rahmawati", telp: "081398765402", instansi: "Dinas Kesehatan Sidoarjo", status_peserta: null },
-  { id: 3, nama: "Ahmad Fauzi", telp: "085645678903", instansi: "BKD Sidoarjo", status_peserta: null },
-  { id: 4, nama: "Dewi Lestari", telp: "087812345604", instansi: "Dinas Pendidikan Sidoarjo", status_peserta: null },
-  { id: 5, nama: "Eko Prasetyo", telp: "082123456705", instansi: "Dinas Perhubungan Sidoarjo", status_peserta: null },
-  { id: 6, nama: "Rina Amelia", telp: "089876543206", instansi: "DPUBMSDA Sidoarjo", status_peserta: null },
-  { id: 7, nama: "Agus Hermawan", telp: "081122334407", instansi: "DLHK Sidoarjo", status_peserta: null },
-  { id: 8, nama: "Mega Utami", telp: "081223344508", instansi: "Dinas Sosial Sidoarjo", status_peserta: null },
-  { id: 9, nama: "Hendra Wijaya", telp: "081334455609", instansi: "Satpol PP Sidoarjo", status_peserta: null },
-  { id: 10, nama: "Tri Susilo", telp: "081445566710", instansi: "BPPD Sidoarjo", status_peserta: null }
-];
 
-const DUMMY_PRIZES = [
-  { id: 1, name: "Sepeda", description: "sepeda lipat", remaining_quota: 1, total_quota: 1 },
-  { id: 2, name: "TV LG 55 Inch", description: "Smart TV", remaining_quota: 2, total_quota: 2 },
-  { id: 3, name: "Sepeda Listrik", description: "E-bike", remaining_quota: 1, total_quota: 1 },
-];
 
 // Singleton Web Audio API Context (Reused across all sound calls to prevent browser AudioContext limits)
 let globalAudioCtx = null;
@@ -623,6 +606,7 @@ const App = () => {
         nama: p.name,
         telp: p.phone,
         instansi: p.nik ? maskNik(p.nik) : (p.instansi || "Peserta"),
+        desa: p.desa || p.village || p.desa_name || p.village_name || p.kelurahan || "-",
       }));
       setNames(fetchedParticipants);
 
@@ -656,6 +640,7 @@ const App = () => {
         nik: r.participant?.nik ? String(r.participant.nik) : "-",
         maskedNik: r.participant?.nik ? maskNik(r.participant.nik) : (r.participant?.instansi || r.participant?.kab_name || "Peserta"),
         instansi: r.participant?.instansi || r.participant?.kab_name || "Peserta",
+        desa: r.participant?.desa || r.participant?.village || r.participant?.desa_name || r.participant?.village_name || r.participant?.kelurahan || "-",
         phone: r.participant?.phone || r.participant?.telp || "-",
         prize: r.prize?.name || "-",
         drawTime: new Date(r.submitted_at || r.created_at).toLocaleTimeString("id-ID", {
@@ -688,7 +673,7 @@ const App = () => {
       if (selectedPrizeIdRef.current && processedPrizes.length > 0) {
         const currentIdStr = String(selectedPrizeIdRef.current);
         let matchedPrize = processedPrizes.find((p) => String(p.id) === currentIdStr);
-        
+
         if (!matchedPrize && !isNaN(Number(currentIdStr))) {
           const idx = Number(currentIdStr) - 1;
           if (processedPrizes[idx]) matchedPrize = processedPrizes[idx];
@@ -713,34 +698,7 @@ const App = () => {
       }
 
     } catch (error) {
-      console.error("Error fetching data from local API, using fallback data:", error);
-      if (names.length === 0) {
-        setNames(DUMMY_PARTICIPANTS);
-        setReelItems(DUMMY_PARTICIPANTS.slice(0, 10));
-      }
-      if (prizesList.length === 0) {
-        setPrizesList(DUMMY_PRIZES);
-        if (selectedPrizeIdRef.current && DUMMY_PRIZES.length > 0) {
-          const currentIdStr = String(selectedPrizeIdRef.current);
-          let matchedPrize = DUMMY_PRIZES.find((p) => String(p.id) === currentIdStr);
-          if (!matchedPrize && !isNaN(Number(currentIdStr))) {
-            const idx = Number(currentIdStr) - 1;
-            if (DUMMY_PRIZES[idx]) matchedPrize = DUMMY_PRIZES[idx];
-          }
-          if (matchedPrize) {
-            setSelectedPrizeId(String(matchedPrize.id));
-            selectedPrizeIdRef.current = String(matchedPrize.id);
-            setPrize(matchedPrize.name);
-          }
-        } else if (!selectedPrizeIdRef.current && DUMMY_PRIZES.length > 0) {
-          const available = DUMMY_PRIZES.find((p) => p.remaining_quota > 0);
-          if (available) {
-            setSelectedPrizeId(String(available.id));
-            selectedPrizeIdRef.current = String(available.id);
-            setPrize(available.name);
-          }
-        }
-      }
+      console.error("Error fetching data from API:", error);
     } finally {
       if (!isSilent) setIsRefreshing(false);
     }
@@ -945,7 +903,7 @@ const App = () => {
     setNames((prevNames) => prevNames.filter((p) => p.id !== chosenWinner.id));
 
     // 2. Create a fully shuffled pool of ALL participants (Fisher-Yates Shuffle)
-    const shuffledPool = safeEligible.length > 0 ? [...safeEligible] : [chosenWinner, ...DUMMY_PARTICIPANTS];
+    const shuffledPool = safeEligible.length > 0 ? [...safeEligible] : [chosenWinner];
     for (let j = shuffledPool.length - 1; j > 0; j--) {
       const k = Math.floor(Math.random() * (j + 1));
       [shuffledPool[j], shuffledPool[k]] = [shuffledPool[k], shuffledPool[j]];
@@ -1112,10 +1070,106 @@ const App = () => {
     return (
       (w.nama && w.nama.toLowerCase().includes(q)) ||
       (w.instansi && w.instansi.toLowerCase().includes(q)) ||
+      (w.desa && w.desa.toLowerCase().includes(q)) ||
       (w.prize && w.prize.toLowerCase().includes(q)) ||
-      (w.phone && w.phone.toLowerCase().includes(q))
+      (w.phone && w.phone.toLowerCase().includes(q)) ||
+      (w.nik && w.nik.toLowerCase().includes(q))
     );
   });
+
+  const handleExportExcel = () => {
+    if (!filteredMcWinners || filteredMcWinners.length === 0) {
+      alert("Belum ada data pemenang untuk diexport.");
+      return;
+    }
+
+    try {
+      const dataToExport = filteredMcWinners.map((w, idx) => ({
+        "No": filteredMcWinners.length - idx,
+        "Waktu Undian": w.drawTime || "-",
+        "Nama Pemenang": w.nama || "-",
+        "NIK": w.nik !== "-" ? String(w.nik) : "-",
+        "Kota / Kabupaten": w.instansi || "-",
+        "Desa": w.desa || "-",
+        "No. Telepon": w.phone !== "-" ? String(w.phone) : "-",
+        "Hadiah": w.prize ? w.prize.toUpperCase() : "-",
+        "Status": w.isDisqualified || w.statusText === "HANGUS" ? "HANGUS" : "SAH",
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+
+      // Force NIK and Phone cells to string type ('s') so Excel preserves full digits and leading zeros
+      if (worksheet["!ref"]) {
+        const range = XLSX.utils.decode_range(worksheet["!ref"]);
+        for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+          // NIK column (Column index 3 -> D)
+          const nikCellRef = XLSX.utils.encode_cell({ r: R, c: 3 });
+          if (worksheet[nikCellRef] && worksheet[nikCellRef].v !== "-") {
+            worksheet[nikCellRef].t = "s";
+            worksheet[nikCellRef].z = "@";
+          }
+          // Phone column (Column index 6 -> G)
+          const phoneCellRef = XLSX.utils.encode_cell({ r: R, c: 6 });
+          if (worksheet[phoneCellRef] && worksheet[phoneCellRef].v !== "-") {
+            worksheet[phoneCellRef].t = "s";
+            worksheet[phoneCellRef].z = "@";
+          }
+        }
+      }
+
+      // Column widths
+      worksheet["!cols"] = [
+        { wch: 8 },  // No
+        { wch: 16 }, // Waktu Undian
+        { wch: 28 }, // Nama Pemenang
+        { wch: 22 }, // NIK
+        { wch: 30 }, // Kota / Kabupaten
+        { wch: 25 }, // Desa
+        { wch: 18 }, // No. Telepon
+        { wch: 25 }, // Hadiah
+        { wch: 12 }, // Status
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Pemenang Doorprize");
+
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      const filename = `Daftar_Pemenang_Doorprize_${dateStr}.xlsx`;
+
+      XLSX.writeFile(workbook, filename);
+    } catch (err) {
+      console.error("Export Excel error:", err);
+      exportCSVFallback();
+    }
+  };
+
+  const exportCSVFallback = () => {
+    const headers = ["No", "Waktu Undian", "Nama Pemenang", "NIK", "Kota / Kabupaten", "Desa", "No. Telepon", "Hadiah", "Status"];
+    const rows = filteredMcWinners.map((w, idx) => [
+      filteredMcWinners.length - idx,
+      `"${w.drawTime || "-"}"`,
+      `"${(w.nama || "-").replace(/"/g, '""')}"`,
+      `"='${w.nik !== "-" ? w.nik : "-"}'"`,
+      `"${(w.instansi || "-").replace(/"/g, '""')}"`,
+      `"${(w.desa || "-").replace(/"/g, '""')}"`,
+      `"='${w.phone !== "-" ? w.phone : "-"}'"`,
+      `"${((w.prize || "-").toUpperCase()).replace(/"/g, '""')}"`,
+      `"${w.isDisqualified || w.statusText === "HANGUS" ? "HANGUS" : "SAH"}"`
+    ]);
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    link.setAttribute("download", `Daftar_Pemenang_Doorprize_${dateStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   if (!isUnlocked) {
     return (
@@ -1469,7 +1523,7 @@ const App = () => {
             <div className="mc-search-box">
               <input
                 type="text"
-                placeholder="🔍 Cari nama pemenang, NIK, Kota/Kabupaten, atau telepon..."
+                placeholder="🔍 Cari nama pemenang, NIK, Kota/Kabupaten, Desa, atau telepon..."
                 value={mcSearchQuery}
                 onChange={(e) => setMcSearchQuery(e.target.value)}
                 className="mc-input-field"
@@ -1483,6 +1537,12 @@ const App = () => {
                 disabled={isRefreshing}
               >
                 {isRefreshing ? "⏳ Syncing..." : "🔄 Refresh Manual"}
+              </button>
+              <button
+                className="btn-mc-action excel"
+                onClick={handleExportExcel}
+              >
+                📊 Export Excel
               </button>
               <button
                 className="btn-mc-action print"
@@ -1514,6 +1574,7 @@ const App = () => {
                       <th>Nama Pemenang</th>
                       <th>NIK (Lengkap)</th>
                       <th>Kota / Kabupaten</th>
+                      <th>Desa</th>
                       <th>No. Telepon (Lengkap)</th>
                       <th>Hadiah</th>
                       <th>Status & Aksi</th>
@@ -1536,6 +1597,7 @@ const App = () => {
                             {w.nik !== "-" ? w.nik : "-"}
                           </td>
                           <td data-label="Kota / Kabupaten">{w.instansi || "Peserta"}</td>
+                          <td data-label="Desa">{w.desa || "-"}</td>
                           <td data-label="No. Telepon (Lengkap)" style={{ fontWeight: "800", color: "#1a1a1a" }}>
                             {w.phone || "-"}
                           </td>
