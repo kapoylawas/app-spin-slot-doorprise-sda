@@ -97,6 +97,17 @@ const playSound = (type) => {
   }
 };
 
+// Haptic vibration feedback for mobile touchscreen controllers
+const triggerHaptic = (pattern = 40) => {
+  if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
+    try {
+      window.navigator.vibrate(pattern);
+    } catch {
+      // ignore
+    }
+  }
+};
+
 // Confetti generator component
 const Confetti = () => {
   const colors = ["#ff5722", "#ffeb3b", "#4caf50", "#00bcd4", "#9c27b0", "#e91e63", "#ffc107", "#e74c3c", "#f1c40f", "#2ecc71"];
@@ -437,6 +448,7 @@ const App = () => {
 
   const selectPrizeDirect = (p) => {
     if (rolling || !p || p.remaining_quota <= 0) return;
+    triggerHaptic(35);
     const pIdStr = String(p.id);
     setSelectedPrizeId(pIdStr);
     selectedPrizeIdRef.current = pIdStr;
@@ -895,6 +907,7 @@ const App = () => {
 
     // LOCK the draw — synchronous, no race condition possible
     isDrawingRef.current = true;
+    triggerHaptic([60, 40, 60]);
     setWinner(false);
     setRolling(true);
     setWinnerData(null);
@@ -996,6 +1009,7 @@ const App = () => {
   };
 
   const closeWinnerModal = async () => {
+    triggerHaptic(35);
     sendRemoteAction("CLOSE_WINNER");
     setWinner(false);
     setWinnerData(null);
@@ -1008,6 +1022,7 @@ const App = () => {
 
   const startTimer = () => {
     if (countdown > 0) {
+      triggerHaptic(35);
       sendRemoteAction("START_TIMER");
       setIsTimerRunning(true);
       playSound("beep");
@@ -1015,11 +1030,13 @@ const App = () => {
   };
 
   const stopTimer = () => {
+    triggerHaptic(35);
     sendRemoteAction("STOP_TIMER");
     setIsTimerRunning(false);
   };
 
   const resetTimer = () => {
+    triggerHaptic(35);
     sendRemoteAction("RESET_TIMER");
     setIsTimerRunning(false);
     setCountdown(5);
@@ -1216,7 +1233,7 @@ const App = () => {
       <nav className="top-nav-tabs">
         <div className="top-nav-brand">
           <img src={sidoarjoImage} alt="Logo Sidoarjo" />
-          <span>SIDOARJO LUCKY DRAW</span>
+          <span className="brand-text">SIDOARJO LUCKY DRAW</span>
         </div>
 
         <div className="view-switcher">
@@ -1228,7 +1245,7 @@ const App = () => {
               window.history.pushState({}, "", "?mode=display");
             }}
           >
-            📺 Tampilan Videotron
+            📺 <span>Videotron</span>
           </button>
           <button
             className={`view-tab-btn ${appMode === "controller" ? "active" : ""}`}
@@ -1237,7 +1254,7 @@ const App = () => {
               window.history.pushState({}, "", "?mode=controller");
             }}
           >
-            🎮 Remote Controller (Komputer A)
+            🎮 <span>Controller</span>
           </button>
           <button
             className={`view-tab-btn ${appMode === "mc" || viewMode === "mc" ? "active" : ""}`}
@@ -1247,7 +1264,7 @@ const App = () => {
               window.history.pushState({}, "", "?mode=mc#mc");
             }}
           >
-            🎤 Mode MC / Presenter
+            🎤 <span>Mode MC</span>
           </button>
         </div>
 
@@ -1255,9 +1272,9 @@ const App = () => {
           <button
             className="btn-search-participant-toggle"
             onClick={() => setShowSearchModal(true)}
-            title="Cari & Cek Status Peserta (Apakah Masuk Daftar / Dikembalikan)"
+            title="Cari & Cek Status Peserta"
           >
-            🔍 Cek Status Peserta
+            🔍 <span className="action-btn-text">Cek Status</span>
           </button>
 
           <button
@@ -1265,23 +1282,23 @@ const App = () => {
             onClick={toggleFullscreen}
             title="Toggle Mode Fullscreen / Layar Penuh (Tekan 'F')"
           >
-            {isFullscreen ? "↙ Keluar Fullscreen" : "⛶ Mode Fullscreen (F)"}
+            {isFullscreen ? "↙ Keluar" : "⛶ Fullscreen"}
           </button>
 
           <button
             className="btn-lock-app-toggle"
             onClick={handleLockApp}
-            title="Kunci Akses Aplikasi (Memerlukan PIN lagi)"
+            title="Kunci Akses Aplikasi"
           >
-            🔒 Kunci App
+            🔒 <span className="action-btn-text">Kunci</span>
           </button>
 
           <div className="live-indicator">
             <span className={`pulse-dot ${socketConnected ? "green" : "red"}`}></span>
-            <span>
+            <span className="live-indicator-label">
               {socketConnected
-                ? `LAN SOCKET OK (${socketClients.display} Display)`
-                : "OFFLINE / SINGLE"}
+                ? `LAN OK (${socketClients.display} Display)`
+                : "OFFLINE"}
             </span>
           </div>
         </div>
@@ -1301,62 +1318,49 @@ const App = () => {
          VIEW MODE: REMOTE CONTROLLER DASHBOARD (KOMPUTER A)
          ============================================================ */}
       {appMode === "controller" ? (
-        <div className="controller-container animate-fade-in" style={{ padding: "20px", maxWidth: "1200px", margin: "0 auto" }}>
+        <div className="controller-container animate-fade-in">
           {/* Header Banner */}
-          <div style={{ background: "#1a1a1a", color: "#fff", padding: "16px 24px", borderRadius: "12px", border: "3px solid #1a1a1a", boxShadow: "4px 4px 0px #1a1a1a", marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: "1.4rem", color: "var(--color-yellow)" }}>🎮 REMOTE CONTROLLER (KOMPUTER A)</h2>
-              <p style={{ margin: "4px 0 0 0", fontSize: "0.9rem", color: "#bbb" }}>Operator Tombol Pengacak Doorprize Panggung</p>
+          <div className="controller-header-card">
+            <div className="controller-title-block">
+              <h2>🎮 REMOTE CONTROLLER</h2>
+              <p>Operator Tombol Pengacak Doorprize Panggung</p>
             </div>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <span style={{ padding: "6px 12px", borderRadius: "20px", fontSize: "0.85rem", fontWeight: "800", background: socketConnected ? "rgba(76, 175, 80, 0.2)" : "rgba(239, 83, 80, 0.2)", color: socketConnected ? "#4caf50" : "#ef5350", border: socketConnected ? "1px solid #4caf50" : "1px solid #ef5350" }}>
+            <div className="controller-status-badges">
+              <span className={`badge-socket-status ${socketConnected ? "active" : "inactive"}`}>
                 {socketConnected ? "🟢 Socket LAN Active" : "🔴 Disconnected"}
               </span>
-              <span style={{ padding: "6px 12px", borderRadius: "20px", fontSize: "0.85rem", fontWeight: "800", background: "rgba(33, 150, 243, 0.2)", color: "#2196f3", border: "1px solid #2196f3" }}>
+              <span className="badge-display-count">
                 📺 Layar Display: {socketClients.display} Online
               </span>
             </div>
           </div>
 
           {/* Grid Layout */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
+          <div className="controller-main-grid">
             {/* Left Card: Big Spin Control */}
-            <div style={{ background: "#fff", padding: "24px", borderRadius: "16px", border: "3px solid #1a1a1a", boxShadow: "6px 6px 0px #1a1a1a", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+            <div className="controller-card">
               <div>
-                <h3 style={{ fontSize: "1.2rem", fontWeight: "900", marginBottom: "12px", borderBottom: "2px dashed #1a1a1a", paddingBottom: "8px" }}>
+                <h3 className="controller-card-title">
                   1. KONTROL UTAMA TOMBOL ACAK
                 </h3>
-                <div style={{ background: "var(--bg-warm)", border: "2px solid #1a1a1a", padding: "12px", borderRadius: "8px", marginBottom: "16px" }}>
-                  <div style={{ fontSize: "0.8rem", fontWeight: "800", color: "#666" }}>HADIAH TERPILIH DI PANGGUNG:</div>
-                  <div style={{ fontSize: "1.2rem", fontWeight: "900", color: "var(--color-orange)", marginTop: "4px" }}>
+                <div className="controller-selected-prize-box">
+                  <div className="controller-selected-prize-label">HADIAH TERPILIH DI PANGGUNG:</div>
+                  <div className="controller-selected-prize-val">
                     {selectedPrizeObj ? `🎁 ${selectedPrizeObj.name.toUpperCase()} (Sisa: ${selectedPrizeObj.remaining_quota}/${selectedPrizeObj.total_quota})` : "⚠️ BELUM MEMILIH HADIAH"}
                   </div>
                 </div>
               </div>
 
               <button
-                disabled={rolling}
+                disabled={rolling || isPrizeQuotaExhausted}
                 onClick={() => startDraw(false)}
-                style={{
-                  width: "100%",
-                  padding: "28px 20px",
-                  fontSize: "1.6rem",
-                  fontWeight: "900",
-                  color: "#fff",
-                  background: rolling ? "#9e9e9e" : isPrizeQuotaExhausted ? "linear-gradient(135deg, #e67e22, #d35400)" : "linear-gradient(135deg, #f5a623, #ff5722)",
-                  border: "4px solid #1a1a1a",
-                  borderRadius: "16px",
-                  boxShadow: rolling ? "none" : "6px 6px 0px #1a1a1a",
-                  cursor: rolling ? "not-allowed" : "pointer",
-                  transition: "transform 0.1s, boxShadow 0.1s",
-                  marginTop: "16px"
-                }}
+                className={`controller-buzzer-btn ${rolling ? "is-rolling" : ""}`}
               >
                 <div>
                   <div>{rolling ? "🎰 SEDANG MENGACAK DI PANGGUNG..." : "🎲 ACAK PEMENANG DI PANGGUNG"}</div>
                   {!rolling && (
-                    <div style={{ fontSize: "0.75rem", fontWeight: "700", opacity: 0.9, marginTop: "4px" }}>
-                      ⌨️ Tekan SPACE / ENTER / Remote Clicker
+                    <div className="controller-buzzer-subtext">
+                      👆 Sentuh Tombol / Tekan SPACE / Remote Clicker
                     </div>
                   )}
                 </div>
@@ -1364,11 +1368,11 @@ const App = () => {
             </div>
 
             {/* Right Card: Prize Picker Grid */}
-            <div style={{ background: "#fff", padding: "24px", borderRadius: "16px", border: "3px solid #1a1a1a", boxShadow: "6px 6px 0px #1a1a1a" }}>
-              <h3 style={{ fontSize: "1.2rem", fontWeight: "900", marginBottom: "12px", borderBottom: "2px dashed #1a1a1a", paddingBottom: "8px" }}>
+            <div className="controller-card">
+              <h3 className="controller-card-title">
                 2. PILIH HADIAH UNDIAN
               </h3>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px", maxHeight: "320px", overflowY: "auto" }}>
+              <div className="controller-prize-list">
                 {prizesList.map((p, idx) => {
                   const isSelected = String(p.id) === String(selectedPrizeId);
                   const isZero = p.remaining_quota <= 0;
@@ -1377,22 +1381,10 @@ const App = () => {
                       key={p.id}
                       disabled={rolling || isZero}
                       onClick={() => selectPrizeDirect(p)}
-                      style={{
-                        padding: "12px 16px",
-                        borderRadius: "10px",
-                        border: isSelected ? "3px solid #1a1a1a" : "2px solid #ddd",
-                        background: isSelected ? "var(--color-orange-light)" : isZero ? "#f5f5f5" : "#fff",
-                        color: isZero ? "#aaa" : "#1a1a1a",
-                        fontWeight: "800",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        cursor: rolling || isZero ? "not-allowed" : "pointer",
-                        boxShadow: isSelected ? "3px 3px 0px #1a1a1a" : "none"
-                      }}
+                      className={`controller-prize-btn ${isSelected ? "is-selected" : ""}`}
                     >
                       <span>#{idx + 1} 🎁 {p.name}</span>
-                      <span style={{ fontSize: "0.85rem", padding: "4px 8px", borderRadius: "6px", background: isZero ? "#e0e0e0" : "var(--color-yellow)", border: "1px solid #1a1a1a" }}>
+                      <span className={`controller-prize-badge ${isZero ? "is-zero" : ""}`}>
                         {isZero ? "HABIS" : `Sisa: ${p.remaining_quota}`}
                       </span>
                     </button>
@@ -1404,11 +1396,11 @@ const App = () => {
 
           {/* Active Winner Control Panel */}
           {winner && winnerData && (
-            <div style={{ background: "#fff", padding: "24px", borderRadius: "16px", border: "3px solid #1a1a1a", boxShadow: "6px 6px 0px #1a1a1a", marginTop: "20px" }}>
-              <h3 style={{ fontSize: "1.2rem", fontWeight: "900", color: "#1a1a1a", borderBottom: "2px dashed #1a1a1a", paddingBottom: "8px", marginBottom: "16px" }}>
+            <div className="controller-winner-card">
+              <h3 className="controller-card-title" style={{ color: "#1a1a1a", marginBottom: "16px" }}>
                 🏆 PEMENANG TERPILIH DI LAYAR PANGGUNG
               </h3>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px" }}>
+              <div className="controller-winner-grid">
                 <div>
                   <h2 style={{ fontSize: "1.6rem", fontWeight: "900", color: "#1a1a1a", margin: 0 }}>{winnerData.nama}</h2>
                   <p style={{ margin: "6px 0", fontSize: "1.05rem", fontWeight: "700" }}>🏛️ {winnerData.instansi}</p>
@@ -1416,25 +1408,27 @@ const App = () => {
                   <p style={{ margin: "6px 0", fontSize: "1.1rem", fontWeight: "900", color: "var(--color-green)" }}>🎁 Hadiah: {prize}</p>
                 </div>
 
-                <div style={{ background: "var(--bg-warm)", border: "2px solid #1a1a1a", padding: "16px", borderRadius: "12px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                    <span style={{ fontWeight: "800" }}>⏱️ Timer Pemanggilan:</span>
-                    <span style={{ fontSize: "1.8rem", fontWeight: "900", color: countdown <= 3 ? "#ef5350" : "#1a1a1a" }}>{countdown}s</span>
+                <div className="controller-timer-box">
+                  <div className="controller-timer-display">
+                    <span style={{ fontWeight: "800", fontSize: "1rem" }}>⏱️ Timer Pemanggilan:</span>
+                    <span className={`controller-timer-val ${countdown <= 3 ? "is-urgent" : ""}`}>
+                      {countdown}s
+                    </span>
                   </div>
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <div className="controller-timer-btns">
                     {!isTimerRunning ? (
-                      <button onClick={startTimer} style={{ flex: 1, padding: "10px", fontWeight: "800", background: "var(--color-green)", color: "#fff", border: "2px solid #1a1a1a", borderRadius: "8px", cursor: "pointer" }}>
-                        ▶️ Start Timer (5s)
+                      <button onClick={startTimer} className="btn-ctrl-timer btn-ctrl-timer-start">
+                        ▶️ Start (5s)
                       </button>
                     ) : (
-                      <button onClick={stopTimer} style={{ flex: 1, padding: "10px", fontWeight: "800", background: "var(--color-orange)", color: "#fff", border: "2px solid #1a1a1a", borderRadius: "8px", cursor: "pointer" }}>
-                        ⏸️ Pause Timer
+                      <button onClick={stopTimer} className="btn-ctrl-timer btn-ctrl-timer-pause">
+                        ⏸️ Pause
                       </button>
                     )}
-                    <button onClick={resetTimer} style={{ padding: "10px", fontWeight: "800", background: "#fff", border: "2px solid #1a1a1a", borderRadius: "8px", cursor: "pointer" }}>
+                    <button onClick={resetTimer} className="btn-ctrl-timer btn-ctrl-timer-reset">
                       🔄 Reset
                     </button>
-                    <button onClick={closeWinnerModal} style={{ width: "100%", padding: "10px", fontWeight: "800", background: "#1a1a1a", color: "#fff", border: "2px solid #1a1a1a", borderRadius: "8px", cursor: "pointer", marginTop: "4px" }}>
+                    <button onClick={closeWinnerModal} className="btn-ctrl-timer btn-ctrl-timer-close">
                       ✅ Tutup Modal (Panggung)
                     </button>
                   </div>
@@ -1444,14 +1438,14 @@ const App = () => {
           )}
 
           {/* Quick Shortcuts */}
-          <div style={{ marginTop: "20px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <a href="?mode=display" target="_blank" rel="noreferrer" style={{ padding: "10px 16px", borderRadius: "8px", background: "var(--color-blue)", color: "#fff", textDecoration: "none", fontWeight: "800", border: "2px solid #1a1a1a" }}>
+          <div className="controller-actions-row">
+            <a href="?mode=display" target="_blank" rel="noreferrer" className="btn-ctrl-action" style={{ background: "var(--color-blue)", color: "#fff" }}>
               📺 Buka Display Panggung (Tab Baru)
             </a>
-            <button onClick={() => setShowSearchModal(true)} style={{ padding: "10px 16px", borderRadius: "8px", background: "#fff", color: "#1a1a1a", fontWeight: "800", border: "2px solid #1a1a1a", cursor: "pointer" }}>
+            <button onClick={() => setShowSearchModal(true)} className="btn-ctrl-action" style={{ background: "#fff", color: "#1a1a1a" }}>
               🔍 Cek Status Peserta
             </button>
-            <button onClick={resetLottery} style={{ padding: "10px 16px", borderRadius: "8px", background: "var(--color-red-light)", color: "var(--color-red)", fontWeight: "800", border: "2px solid var(--color-red)", cursor: "pointer" }}>
+            <button onClick={resetLottery} className="btn-ctrl-action" style={{ background: "var(--color-red-light)", color: "var(--color-red)", borderColor: "var(--color-red)" }}>
               ⚠️ Reset Data Undian
             </button>
           </div>
